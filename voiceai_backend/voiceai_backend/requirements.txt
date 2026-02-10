@@ -17,4 +17,5 @@ uvicorn==0.40.0
 websockets==16.0
 sentence-transformers==5.2.2
 pymongo==4.16.0
+certifi
 starlette==0.50.0

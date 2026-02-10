@@ -4,6 +4,7 @@ from pymongo import ASCENDING, DESCENDING
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import os
+import certifi
 from bson import ObjectId
 from dotenv import load_dotenv
 load_dotenv()
@@ -171,7 +172,7 @@ async def connect_to_mongodb():
     global mongodb_client, mongodb_database
     
     try:
-        mongodb_client = AsyncIOMotorClient(MONGODB_URL)
+        mongodb_client = AsyncIOMotorClient(MONGODB_URL, tlsCAFile=certifi.where())
         mongodb_database = mongodb_client[DATABASE_NAME]
         
         # Create indexes for call_history collection
