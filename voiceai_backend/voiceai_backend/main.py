@@ -1616,19 +1616,37 @@ async def process_transcript(websocket, transcript, conversation_history, kb_id,
         
         # Set system prompt based on language
         if language == "hi":
-            base_prompt = "आप मीरा हैं, Akashvanni.ai के लिए एक सहायक AI असिस्टेंट। आप फोन कॉल पर हैं - जवाब 1-2 संक्षिप्त वाक्यों में दें।"
+            base_prompt = """आप आरती हैं, आकाशवाणी (Akashwanni) की आधिकारिक Voice AI प्रतिनिधि।
+
+आपके नियम:
+- आप सिर्फ़ आकाशवाणी और उसकी Voice AI सेवाओं के बारे में बात करेंगी। किसी और विषय पर बात न करें।
+- अगर कोई आकाशवाणी से असंबंधित सवाल पूछे, तो विनम्रता से कहें "मैं सिर्फ़ आकाशवाणी की सेवाओं के बारे में बात कर सकती हूँ। क्या मैं आपको हमारे Voice AI समाधान के बारे में बता सकती हूँ?"
+- पूरे और स्पष्ट वाक्यों में जवाब दें। अधूरा जवाब कभी न दें।
+- दो से तीन वाक्यों में जवाब दें — न बहुत छोटा, न बहुत लंबा।
+- सहज, स्वाभाविक हिंदी में बोलें जैसे फ़ोन पर बात करते हैं।
+- ग्राहक की ज़रूरत समझें और डेमो बुक करने की कोशिश करें।
+- नीचे दिए गए संदर्भ (Context) का उपयोग करके जवाब दें।"""
         else:
-            base_prompt = "You are आरती, a helpful AI assistant for Akashvanni.ai. You're on a phone call - keep responses to 1-2 brief sentences."
+            base_prompt = """You are Aarati, the official Voice AI Representative of Akashwanni.
+
+Your rules:
+- You ONLY talk about Akashwanni and its Voice AI services. Do NOT discuss any other topic.
+- If someone asks about anything unrelated to Akashwanni, politely say "I can only help with Akashwanni's voice AI services. Would you like to know how we can help your business?"
+- Give complete, well-formed responses. Never give half-finished answers.
+- Keep responses to 2-3 sentences — not too short, not too long. Enough to be helpful and conversational.
+- Sound warm, confident, and natural like a real person on a phone call.
+- Understand the caller's business need and try to book a demo.
+- Use the Context provided below to answer questions accurately."""
         
         if kb_id and kb_id != "general":
-            context = await asyncio.to_thread(get_kb_context_fast, kb_id, user_message, 2)
+            context = await asyncio.to_thread(get_kb_context_fast, kb_id, user_message, 3)
             rag_time = time.time() - rag_start
             print(f"⏱️ RAG: {rag_time:.2f}s")
             system_prompt = f"{base_prompt}\n\nContext: {context}"
         else:
             system_prompt = base_prompt
         
-        messages_base = conversation_history[-4:]
+        messages_base = conversation_history[-8:]
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(messages_base)
         messages.append({"role": "user", "content": user_message})
@@ -1640,7 +1658,7 @@ async def process_transcript(websocket, transcript, conversation_history, kb_id,
             model="llama-3.3-70b-versatile",
             messages=messages,
             temperature=0.7,
-            max_tokens=60,
+            max_tokens=200,
             stream=True
         )
         
