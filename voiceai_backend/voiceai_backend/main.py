@@ -76,8 +76,8 @@ if not CARTESIA_API_KEY:
 
 # Sarvam TTS Configuration for Indian language voice synthesis
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
-SARVAM_HINDI_SPEAKER = os.getenv("SARVAM_HINDI_SPEAKER", "shubh")
-SARVAM_MODEL = "bulbul:v3"
+SARVAM_HINDI_SPEAKER = os.getenv("SARVAM_HINDI_SPEAKER", "anushka")
+SARVAM_MODEL = "bulbul:v2"
 
 if SARVAM_API_KEY:
     print(f"[STARTUP] Sarvam TTS enabled: model={SARVAM_MODEL}, speaker={SARVAM_HINDI_SPEAKER}")
@@ -1759,15 +1759,17 @@ Your rules:
         if tts_engine == "sarvam" and sarvam_client:
             # Sarvam TTS (streaming) - optimized for Indian languages
             try:
+                sarvam_lang = "hi-IN" if language == "hi" else "en-IN"
                 async with sarvam_client.text_to_speech_streaming.connect(
                     model=SARVAM_MODEL,
-                    send_completion_event=True
+                    send_completion_event="true"
                 ) as sarvam_ws:
                     await sarvam_ws.configure(
-                        target_language_code="hi-IN",
+                        target_language_code=sarvam_lang,
                         speaker=sarvam_speaker or SARVAM_HINDI_SPEAKER,
                         pace=1.0,
                         output_audio_codec="mulaw",
+                        speech_sample_rate=8000,
                     )
 
                     await sarvam_ws.convert(ai_response)
