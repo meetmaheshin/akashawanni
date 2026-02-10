@@ -43,6 +43,8 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 SERVER_URL = os.getenv("SERVER_URL", "https://akashawanni-production.up.railway.app")
+print(f"[STARTUP] SERVER_URL={SERVER_URL}")
+print(f"[STARTUP] WebSocket URL will be: {SERVER_URL.replace('https://', 'wss://').replace('http://', 'ws://')}/ws/media-stream")
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -535,18 +537,22 @@ async def make_outbound_call(
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_id}' not found")
     
     server_url = SERVER_URL
-    
+
     server_url = server_url.rstrip('/')
-    
+
+    websocket_url = f'{SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")}/ws/media-stream'
+    print(f"[CALL] SERVER_URL={SERVER_URL}")
+    print(f"[CALL] WebSocket URL for Twilio: {websocket_url}")
+    print(f"[CALL] Calling {to_number} with kb_id={kb_id}, language={language}")
+
     twiml = VoiceResponse()
     if language == 'en':
         twiml.say(welcome_message, voice="Polly.Joanna")
     elif language == 'hi':
         twiml.say(welcome_message, language="hi-IN")
     twiml.pause(length=1)
-    
+
     connect = Connect()
-    websocket_url = f'{SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")}/ws/media-stream'
     stream = Stream(url=websocket_url)
     
     # Add custom parameters that will be sent in the 'start' event
@@ -1234,8 +1240,9 @@ async def make_single_call(
 async def media_stream_handler(websocket: WebSocket):
     """Handle Twilio Media Stream WebSocket connection with REAL-TIME Deepgram STT"""
     await websocket.accept()
-    print("✓ WebSocket connected")
-    
+    print("[WS] ✓ WebSocket CONNECTED - Twilio media stream accepted")
+    print(f"[WS] Client: {websocket.client}")
+
     # Default values - will be updated from start event
     kb_id = "ailancers"
     language = "en"
@@ -1267,21 +1274,27 @@ async def media_stream_handler(websocket: WebSocket):
     call_identifier = None
     
     try:
+        msg_count = 0
         async for message in websocket.iter_text():
             data = json.loads(message)
             event_type = data.get("event")
-            
+            msg_count += 1
+
+            if msg_count <= 5 or msg_count % 100 == 0:
+                print(f"[WS] Message #{msg_count}: event={event_type}")
+
             if event_type == "start":
                 stream_sid = data["start"]["streamSid"]
                 call_sid = data["start"]["callSid"]
-                
+
                 # Extract custom parameters from start event
                 custom_params = data["start"].get("customParameters", {})
                 kb_id = custom_params.get("kb_id", "ailancers")
                 language = custom_params.get("language", "en")
-                
-                print(f"✓ Stream started: {stream_sid}")
-                print(f"✓ Parameters - kb_id: {kb_id}, language: {language}")
+
+                print(f"[WS] ✓ Stream STARTED: streamSid={stream_sid}, callSid={call_sid}")
+                print(f"[WS] ✓ Custom params: kb_id={kb_id}, language={language}")
+                print(f"[WS] ✓ Full start data keys: {list(data['start'].keys())}")
                 
                 # Get language configuration
                 lang_config = LANGUAGE_CONFIG.get(language, LANGUAGE_CONFIG["en"])
@@ -1394,13 +1407,18 @@ async def media_stream_handler(websocket: WebSocket):
                         )
             
             elif event_type == "media":
+                if msg_count == 6:
+                    print(f"[WS] ✓ First MEDIA packet received - audio is flowing from Twilio")
                 if deepgram_connection and not is_speaking:
                     try:
                         payload = data["media"]["payload"]
                         audio_chunk = base64.b64decode(payload)
                         deepgram_connection.send_media(audio_chunk)
                     except Exception as e:
-                        print(f"✗ Error sending to Deepgram: {e}")
+                        print(f"[WS] ✗ Error sending to Deepgram: {e}")
+                elif not deepgram_connection:
+                    if msg_count < 10:
+                        print(f"[WS] ✗ Media received but NO Deepgram connection!")
             
             elif event_type == "mark":
                 mark_name = data.get("mark", {}).get("name", "")
@@ -1410,13 +1428,16 @@ async def media_stream_handler(websocket: WebSocket):
                     print("✓ Ready for next input")
             
             elif event_type == "stop":
-                print(f"✓ Stream stopped")
+                print(f"[WS] Stream STOPPED after {msg_count} messages")
                 break
-    
+
+            elif event_type == "connected":
+                print(f"[WS] ✓ Twilio 'connected' event received")
+
     except WebSocketDisconnect:
-        print("✗ Disconnected")
+        print(f"[WS] ✗ DISCONNECTED after {msg_count} messages, duration={time.time()-call_start_time:.1f}s")
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[WS] ✗ ERROR: {e}")
         import traceback
         traceback.print_exc()
     finally:
