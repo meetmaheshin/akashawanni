@@ -3,7 +3,6 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8800';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,7 +23,7 @@ export const AuthProvider = ({ children }) => {
     const loadUser = async () => {
       if (token) {
         try {
-          const response = await axios.get(`${API_BASE_URL}/api/auth/me`);
+          const response = await axios.get(`/api/auth/me`);
           setUser(response.data);
         } catch (error) {
           console.error('Failed to load user:', error);
@@ -41,7 +40,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+      const response = await axios.post(`/api/auth/login`, {
         email,
         password
       });
@@ -64,7 +63,7 @@ export const AuthProvider = ({ children }) => {
 
   const signup = async (name, email, password) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+      const response = await axios.post(`/api/auth/signup`, {
         name,
         email,
         password
