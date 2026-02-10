@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 import audioop
 import time
 import traceback
+from sarvamai import AsyncSarvamAI, AudioOutput, EventResponse
 from functools import lru_cache
 from deepgram import DeepgramClient
 from deepgram.core.events import EventType as LiveTranscriptionEvents
@@ -73,17 +74,29 @@ CARTESIA_HINDI_VOICE_ID = os.getenv("CARTESIA_HINDI_VOICE_ID", "47f3bbb1-e98f-4e
 if not CARTESIA_API_KEY:
     raise ValueError("CARTESIA_API_KEY environment variable is required")
 
+# Sarvam TTS Configuration for Indian language voice synthesis
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
+SARVAM_HINDI_SPEAKER = os.getenv("SARVAM_HINDI_SPEAKER", "shubh")
+SARVAM_MODEL = "bulbul:v3"
+
+if SARVAM_API_KEY:
+    print(f"[STARTUP] Sarvam TTS enabled: model={SARVAM_MODEL}, speaker={SARVAM_HINDI_SPEAKER}")
+else:
+    print("[STARTUP] Sarvam TTS not configured, Hindi will use Cartesia")
+
 # Language configuration
 LANGUAGE_CONFIG = {
     "en": {
         "voice_id": CARTESIA_ENG_VOICE_ID,
         "deepgram_language": "en",
-        "name": "English"
+        "name": "English",
+        "tts_engine": "cartesia"
     },
     "hi": {
         "voice_id": CARTESIA_HINDI_VOICE_ID,
         "deepgram_language": "hi",
-        "name": "Hindi"
+        "name": "Hindi",
+        "tts_engine": "sarvam" if SARVAM_API_KEY else "cartesia"
     }
 }
 
@@ -98,6 +111,7 @@ class ConnectionManager:
     def __init__(self):
         self.deepgram_connections = {}  # call_id -> connection
         self.cartesia_connections = {}  # call_id -> websocket
+        self.sarvam_connections = {}    # call_id -> AsyncSarvamAI streaming ws
         self.is_initialized = False
     
     async def create_cartesia_connection(self, call_id: str):
@@ -171,6 +185,33 @@ class ConnectionManager:
                 print(f"✓ Cartesia connection cleaned up for call: {call_id}")
             except Exception as e:
                 print(f"✗ Error cleaning up Cartesia: {e}")
+
+    async def create_sarvam_client(self, call_id: str):
+        """Create a Sarvam AI client for a specific call"""
+        if not SARVAM_API_KEY:
+            print(f"✗ Sarvam API key not configured")
+            return None
+        try:
+            client = AsyncSarvamAI(api_subscription_key=SARVAM_API_KEY)
+            self.sarvam_connections[call_id] = client
+            print(f"✓ Sarvam client created for call: {call_id}")
+            return client
+        except Exception as e:
+            print(f"✗ Failed to create Sarvam client for call {call_id}: {e}")
+            return None
+
+    def get_sarvam_client(self, call_id: str):
+        """Get Sarvam client for a specific call"""
+        return self.sarvam_connections.get(call_id)
+
+    async def cleanup_sarvam(self, call_id: str):
+        """Cleanup Sarvam connection for a specific call"""
+        if call_id in self.sarvam_connections:
+            try:
+                del self.sarvam_connections[call_id]
+                print(f"✓ Sarvam client cleaned up for call: {call_id}")
+            except Exception as e:
+                print(f"✗ Error cleaning up Sarvam: {e}")
 
 # Initialize global connection manager
 connection_manager = ConnectionManager()
@@ -1271,6 +1312,8 @@ async def media_stream_handler(websocket: WebSocket):
     
     # Per-call connections (created after start event)
     cartesia_ws = None
+    sarvam_client = None
+    tts_engine = "cartesia"
     call_identifier = None
     
     try:
@@ -1300,23 +1343,33 @@ async def media_stream_handler(websocket: WebSocket):
                 lang_config = LANGUAGE_CONFIG.get(language, LANGUAGE_CONFIG["en"])
                 voice_id = lang_config["voice_id"]
                 deepgram_language = lang_config["deepgram_language"]
-                
+                tts_engine = lang_config.get("tts_engine", "cartesia")
+
+                print(f"[WS] ✓ TTS engine: {tts_engine}")
+
                 # Pre-initialize KB
                 try:
                     initialize_kb(kb_id)
                     print(f"✓ KB initialized: {kb_id}")
                 except Exception as e:
                     print(f"Warning: KB init failed: {e}")
-                
+
                 # Create unique identifier for this call
                 call_identifier = f"call_{call_sid}_{int(time.time() * 1000)}"
-                
-                # Create dedicated Cartesia connection for this call
-                cartesia_ws = await connection_manager.create_cartesia_connection(call_identifier)
-                if not cartesia_ws:
-                    print("✗ Failed to create Cartesia connection")
-                    await websocket.close()
-                    return
+
+                # Create TTS connection based on engine
+                if tts_engine == "sarvam":
+                    sarvam_client = await connection_manager.create_sarvam_client(call_identifier)
+                    if not sarvam_client:
+                        print("✗ Sarvam failed, falling back to Cartesia")
+                        tts_engine = "cartesia"
+
+                if tts_engine == "cartesia":
+                    cartesia_ws = await connection_manager.create_cartesia_connection(call_identifier)
+                    if not cartesia_ws:
+                        print("✗ Failed to create Cartesia connection")
+                        await websocket.close()
+                        return
                 
                 # Initialize Deepgram with correct language
                 deepgram_connection = connection_manager.create_deepgram_connection(call_identifier, deepgram_language)
@@ -1369,7 +1422,9 @@ async def media_stream_handler(websocket: WebSocket):
                                                 stream_sid,
                                                 cartesia_ws,
                                                 language,
-                                                voice_id
+                                                voice_id,
+                                                tts_engine=tts_engine,
+                                                sarvam_client=sarvam_client
                                             ),
                                             event_loop
                                         )
@@ -1489,6 +1544,7 @@ async def media_stream_handler(websocket: WebSocket):
         if call_identifier:
             connection_manager.cleanup_deepgram(call_identifier)
             await connection_manager.cleanup_cartesia(call_identifier)
+            await connection_manager.cleanup_sarvam(call_identifier)
         
         try:
             await websocket.close()
@@ -1579,8 +1635,8 @@ async def generate_call_summary(conversation_history):
         return "Summary generation failed"
 
 
-async def process_transcript(websocket, transcript, conversation_history, kb_id, stream_sid, cartesia_ws, language="en", voice_id=None):
-    """Process transcript from Deepgram and generate response with ULTRA-FAST Cartesia TTS"""
+async def process_transcript(websocket, transcript, conversation_history, kb_id, stream_sid, cartesia_ws, language="en", voice_id=None, tts_engine="cartesia", sarvam_client=None):
+    """Process transcript from Deepgram and generate response with TTS (Cartesia or Sarvam)"""
     
     # Use provided voice_id or get from language config
     if voice_id is None:
@@ -1677,57 +1733,94 @@ Your rules:
         conversation_history.append({"role": "user", "content": user_message})
         conversation_history.append({"role": "assistant", "content": ai_response})
         
-        # TTS with Cartesia (ULTRA-FAST streaming) - No lock needed, dedicated connection
+        # TTS - Route to Cartesia or Sarvam based on engine
         tts_start = time.time()
         chunks = 0
-        
-        context_id = f"ctx_{int(time.time() * 1000)}"
-        
-        # Send TTS request to Cartesia
-        request = {
-            "model_id": "sonic-multilingual",
-            "transcript": ai_response,
-            "voice": {
-                "mode": "id",
-                "id": voice_id
-            },
-            "context_id": context_id,
-            "output_format": {
-                "container": "raw",
-                "encoding": "pcm_mulaw",
-                "sample_rate": 8000
-            },
-            "continue": False
-        }
-        if language == "hi":
-            request["language"] = "hi"
-        
-        await cartesia_ws.send(json.dumps(request))
-        
-        # Stream audio chunks from Cartesia to Twilio
-        while True:
+
+        if tts_engine == "sarvam" and sarvam_client:
+            # Sarvam TTS (streaming) - optimized for Indian languages
             try:
-                response = await asyncio.wait_for(cartesia_ws.recv(), timeout=2.0)
-                data = json.loads(response)
-                
-                if data.get("type") == "chunk":
-                    audio_b64 = data.get("data")
-                    if audio_b64:
-                        await websocket.send_text(json.dumps({
-                            "event": "media",
-                            "streamSid": stream_sid,
-                            "media": {"payload": audio_b64}
-                        }))
-                        chunks += 1
-                
-                elif data.get("type") == "done":
+                async with sarvam_client.text_to_speech_streaming.connect(
+                    model=SARVAM_MODEL,
+                    send_completion_event=True
+                ) as sarvam_ws:
+                    await sarvam_ws.configure(
+                        target_language_code="hi-IN",
+                        speaker=SARVAM_HINDI_SPEAKER,
+                        pace=1.0,
+                        output_audio_codec="mulaw",
+                    )
+
+                    await sarvam_ws.convert(ai_response)
+                    await sarvam_ws.flush()
+
+                    async for msg in sarvam_ws:
+                        if isinstance(msg, AudioOutput):
+                            audio_b64 = msg.data.audio
+                            if audio_b64:
+                                await websocket.send_text(json.dumps({
+                                    "event": "media",
+                                    "streamSid": stream_sid,
+                                    "media": {"payload": audio_b64}
+                                }))
+                                chunks += 1
+                        elif isinstance(msg, EventResponse):
+                            if msg.data.event_type == "final":
+                                break
+
+                tts_time = time.time() - tts_start
+                print(f"⏱️ TTS (Sarvam): {tts_time:.2f}s")
+            except Exception as sarvam_err:
+                print(f"✗ Sarvam TTS error: {sarvam_err}, falling back to Cartesia")
+                tts_engine = "cartesia"
+
+        if tts_engine == "cartesia":
+            # Cartesia TTS (ULTRA-FAST streaming)
+            context_id = f"ctx_{int(time.time() * 1000)}"
+
+            request = {
+                "model_id": "sonic-multilingual",
+                "transcript": ai_response,
+                "voice": {
+                    "mode": "id",
+                    "id": voice_id
+                },
+                "context_id": context_id,
+                "output_format": {
+                    "container": "raw",
+                    "encoding": "pcm_mulaw",
+                    "sample_rate": 8000
+                },
+                "continue": False
+            }
+            if language == "hi":
+                request["language"] = "hi"
+
+            await cartesia_ws.send(json.dumps(request))
+
+            while True:
+                try:
+                    response = await asyncio.wait_for(cartesia_ws.recv(), timeout=2.0)
+                    data = json.loads(response)
+
+                    if data.get("type") == "chunk":
+                        audio_b64 = data.get("data")
+                        if audio_b64:
+                            await websocket.send_text(json.dumps({
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {"payload": audio_b64}
+                            }))
+                            chunks += 1
+
+                    elif data.get("type") == "done":
+                        break
+
+                except asyncio.TimeoutError:
                     break
-            
-            except asyncio.TimeoutError:
-                break
-        
-        tts_time = time.time() - tts_start
-        print(f"⏱️ TTS (Cartesia): {tts_time:.2f}s")
+
+            tts_time = time.time() - tts_start
+            print(f"⏱️ TTS (Cartesia): {tts_time:.2f}s")
         
         # Mark completion
         await websocket.send_text(json.dumps({
