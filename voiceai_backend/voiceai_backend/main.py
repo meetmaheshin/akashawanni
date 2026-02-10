@@ -42,6 +42,7 @@ load_dotenv(override=False)
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+SERVER_URL = os.getenv("SERVER_URL", "https://akashawanni-production.up.railway.app")
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -477,7 +478,7 @@ async def handle_incoming_call(request: Request):
     response.pause(length=1)
     
     connect = Connect()
-    websocket_url = 'wss://kathlyn-clamatorial-manda.ngrok-free.dev/ws/media-stream'
+    websocket_url = f'{SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")}/ws/media-stream'
     stream = Stream(url=websocket_url)
     connect.append(stream)
     response.append(connect)
@@ -533,7 +534,7 @@ async def make_outbound_call(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_id}' not found")
     
-    server_url = "https://kathlyn-clamatorial-manda.ngrok-free.dev"
+    server_url = SERVER_URL
     
     server_url = server_url.rstrip('/')
     
@@ -545,7 +546,7 @@ async def make_outbound_call(
     twiml.pause(length=1)
     
     connect = Connect()
-    websocket_url = 'wss://kathlyn-clamatorial-manda.ngrok-free.dev/ws/media-stream'
+    websocket_url = f'{SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")}/ws/media-stream'
     stream = Stream(url=websocket_url)
     
     # Add custom parameters that will be sent in the 'start' event
@@ -1115,7 +1116,7 @@ async def make_single_call(
         twiml.pause(length=1)
         
         connect = Connect()
-        websocket_url = 'wss://kathlyn-clamatorial-manda.ngrok-free.dev/ws/media-stream'
+        websocket_url = f'{SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")}/ws/media-stream'
         stream = Stream(url=websocket_url)
         
         # Add custom parameters
