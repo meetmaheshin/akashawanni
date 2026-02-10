@@ -555,11 +555,13 @@ async def handle_incoming_call(request: Request):
 
 @app.post("/api/call")
 async def make_outbound_call(
-    to_number: str, 
+    to_number: str,
     kb_id: str = "Akashvanni",
     kb_name: str = None,
     welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
+    tts_engine: str = "cartesia",
+    tts_voice: str = "",
     current_user: dict = Depends(get_current_active_user)
 ):
     """Initiate outbound call and create call history record"""
@@ -599,6 +601,8 @@ async def make_outbound_call(
     # Add custom parameters that will be sent in the 'start' event
     stream.parameter(name='kb_id', value=kb_id)
     stream.parameter(name='language', value=language)
+    stream.parameter(name='tts_engine', value=tts_engine)
+    stream.parameter(name='tts_voice', value=tts_voice)
     
     connect.append(stream)
     twiml.append(connect)
@@ -1335,17 +1339,31 @@ async def media_stream_handler(websocket: WebSocket):
                 kb_id = custom_params.get("kb_id", "Akashvanni")
                 language = custom_params.get("language", "en")
 
+                # Read TTS preferences from custom params (user's choice)
+                tts_engine = custom_params.get("tts_engine", "cartesia")
+                tts_voice = custom_params.get("tts_voice", "")
+
                 print(f"[WS] ✓ Stream STARTED: streamSid={stream_sid}, callSid={call_sid}")
-                print(f"[WS] ✓ Custom params: kb_id={kb_id}, language={language}")
-                print(f"[WS] ✓ Full start data keys: {list(data['start'].keys())}")
-                
+                print(f"[WS] ✓ Custom params: kb_id={kb_id}, language={language}, tts_engine={tts_engine}, tts_voice={tts_voice}")
+
                 # Get language configuration
                 lang_config = LANGUAGE_CONFIG.get(language, LANGUAGE_CONFIG["en"])
                 voice_id = lang_config["voice_id"]
                 deepgram_language = lang_config["deepgram_language"]
-                tts_engine = lang_config.get("tts_engine", "cartesia")
 
-                print(f"[WS] ✓ TTS engine: {tts_engine}")
+                # Override voice_id if user selected a Cartesia voice
+                if tts_engine == "cartesia" and tts_voice:
+                    voice_id = tts_voice
+
+                # Override Sarvam speaker if user selected one
+                sarvam_speaker = tts_voice if (tts_engine == "sarvam" and tts_voice) else SARVAM_HINDI_SPEAKER
+
+                # Validate Sarvam availability
+                if tts_engine == "sarvam" and not SARVAM_API_KEY:
+                    print("✗ Sarvam requested but no API key, falling back to Cartesia")
+                    tts_engine = "cartesia"
+
+                print(f"[WS] ✓ TTS engine: {tts_engine}, voice: {tts_voice or 'default'}")
 
                 # Pre-initialize KB
                 try:
@@ -1424,7 +1442,8 @@ async def media_stream_handler(websocket: WebSocket):
                                                 language,
                                                 voice_id,
                                                 tts_engine=tts_engine,
-                                                sarvam_client=sarvam_client
+                                                sarvam_client=sarvam_client,
+                                                sarvam_speaker=sarvam_speaker
                                             ),
                                             event_loop
                                         )
@@ -1635,7 +1654,7 @@ async def generate_call_summary(conversation_history):
         return "Summary generation failed"
 
 
-async def process_transcript(websocket, transcript, conversation_history, kb_id, stream_sid, cartesia_ws, language="en", voice_id=None, tts_engine="cartesia", sarvam_client=None):
+async def process_transcript(websocket, transcript, conversation_history, kb_id, stream_sid, cartesia_ws, language="en", voice_id=None, tts_engine="cartesia", sarvam_client=None, sarvam_speaker=None):
     """Process transcript from Deepgram and generate response with TTS (Cartesia or Sarvam)"""
     
     # Use provided voice_id or get from language config
@@ -1746,7 +1765,7 @@ Your rules:
                 ) as sarvam_ws:
                     await sarvam_ws.configure(
                         target_language_code="hi-IN",
-                        speaker=SARVAM_HINDI_SPEAKER,
+                        speaker=sarvam_speaker or SARVAM_HINDI_SPEAKER,
                         pace=1.0,
                         output_audio_codec="mulaw",
                     )

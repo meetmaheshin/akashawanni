@@ -2,11 +2,46 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { Phone, Upload, FileText, Loader2, CheckCircle, AlertCircle, PhoneCall } from 'lucide-react';
 
+// Voice options per TTS engine
+const TTS_VOICES = {
+  cartesia: {
+    en: [
+      { id: '', label: 'Default (English)' },
+    ],
+    hi: [
+      { id: '', label: 'Default (Hindi)' },
+    ],
+  },
+  sarvam: {
+    hi: [
+      { id: 'shubh', label: 'Shubh (Male)' },
+      { id: 'aditya', label: 'Aditya (Male)' },
+      { id: 'rahul', label: 'Rahul (Male)' },
+      { id: 'dev', label: 'Dev (Male)' },
+      { id: 'kabir', label: 'Kabir (Male)' },
+      { id: 'ritu', label: 'Ritu (Female)' },
+      { id: 'priya', label: 'Priya (Female)' },
+      { id: 'neha', label: 'Neha (Female)' },
+      { id: 'anushka', label: 'Anushka (Female)' },
+      { id: 'kavya', label: 'Kavya (Female)' },
+      { id: 'shreya', label: 'Shreya (Female)' },
+    ],
+    en: [
+      { id: 'amelia', label: 'Amelia (Female)' },
+      { id: 'sophia', label: 'Sophia (Female)' },
+      { id: 'aditya', label: 'Aditya (Male)' },
+      { id: 'rahul', label: 'Rahul (Male)' },
+    ],
+  },
+};
+
 const CallInterface = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [kbId, setKbId] = useState('');
   const [language, setLanguage] = useState('en');
+  const [ttsEngine, setTtsEngine] = useState('cartesia');
+  const [ttsVoice, setTtsVoice] = useState('');
   const [welcomeMessage, setWelcomeMessage] = useState('Hello! This is आरती from Akashvanni calling you.');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -14,14 +49,25 @@ const CallInterface = () => {
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Get available voices for current engine + language
+  const getAvailableVoices = () => {
+    return TTS_VOICES[ttsEngine]?.[language] || [];
+  };
+
   // Update welcome message when language changes
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
+    setTtsVoice('');
     if (lang === 'hi') {
-      setWelcomeMessage('नमस्ते! मैं Akashvanni से मीरा हूं।');
+      setWelcomeMessage('नमस्ते! मैं Akashvanni से आरती हूं।');
     } else {
       setWelcomeMessage('Hello! This is आरती from Akashvanni calling you.');
     }
+  };
+
+  const handleEngineChange = (engine) => {
+    setTtsEngine(engine);
+    setTtsVoice('');
   };
 
   const handleFileChange = (e) => {
@@ -90,6 +136,8 @@ const CallInterface = () => {
           kb_name: selectedFile?.name.replace('.txt', '') || kbId,
           welcome_message: welcomeMessage,
           language: language,
+          tts_engine: ttsEngine,
+          tts_voice: ttsVoice,
         },
       });
 
@@ -98,7 +146,7 @@ const CallInterface = () => {
         message: `Call initiated successfully! Call SID: ${response.data.call_sid}`,
         callSid: response.data.call_sid,
       });
-      
+
       // Reset form
       setTimeout(() => {
         setPhoneNumber('');
@@ -114,6 +162,8 @@ const CallInterface = () => {
       setLoading(false);
     }
   };
+
+  const availableVoices = getAvailableVoices();
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -145,7 +195,7 @@ const CallInterface = () => {
                   : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
               }`}
             >
-              🇬🇧 English
+              English
             </button>
             <button
               type="button"
@@ -156,10 +206,63 @@ const CallInterface = () => {
                   : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
               }`}
             >
-              🇮🇳 हिंदी (Hindi)
+              हिंदी (Hindi)
             </button>
           </div>
         </div>
+
+        {/* TTS Engine Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Voice Engine
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleEngineChange('cartesia')}
+              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
+                ttsEngine === 'cartesia'
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              <div className="text-sm font-bold">Cartesia</div>
+              <div className="text-xs text-gray-500 mt-1">Ultra-fast, global</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleEngineChange('sarvam')}
+              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
+                ttsEngine === 'sarvam'
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              <div className="text-sm font-bold">Sarvam</div>
+              <div className="text-xs text-gray-500 mt-1">Indian languages, 25+ voices</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Voice Selection */}
+        {availableVoices.length > 0 && (
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Voice
+            </label>
+            <select
+              value={ttsVoice}
+              onChange={(e) => setTtsVoice(e.target.value)}
+              className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all bg-white"
+            >
+              {availableVoices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {voice.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Welcome Message Input */}
         <div className="mb-6">
@@ -295,6 +398,7 @@ const CallInterface = () => {
           </h3>
           <ol className="text-xs text-blue-700 space-y-1 ml-4 list-decimal">
             <li>Upload a .txt file containing your knowledge base</li>
+            <li>Choose your voice engine and voice</li>
             <li>Enter the phone number with country code (e.g., +1234567890)</li>
             <li>Click "Make Call" to initiate the AI-powered call</li>
             <li>Check the History tab to view call transcripts and summaries</li>

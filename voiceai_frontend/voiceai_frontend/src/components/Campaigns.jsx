@@ -618,7 +618,7 @@ const Campaigns = () => {
                     type="button"
                     onClick={() => {
                       setLanguage('hi');
-                      setWelcomeMessage('नमस्ते! मैं आकाशवाणी से मीरा हूं।');
+                      setWelcomeMessage('नमस्ते! मैं आकाशवाणी से आरती हूं।');
                     }}
                     className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
                       language === 'hi'
