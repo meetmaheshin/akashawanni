@@ -7,7 +7,7 @@ import os
 import certifi
 from bson import ObjectId
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=False)
 
 # MongoDB Configuration
 MONGODB_URL = os.getenv("MONGODB_URL")#, "mongodb://localhost:27017")

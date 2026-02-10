@@ -36,7 +36,7 @@ import aiofiles
 from pydantic import BaseModel, EmailStr
 
 
-load_dotenv()
+load_dotenv(override=False)
 
 # Twilio Configuration
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
