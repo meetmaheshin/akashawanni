@@ -198,16 +198,16 @@ async def create_admin_user():
         return
     
     # Check if admin exists
-    admin = await user_db.get_user_by_email("admin@voiceai.com")
-    
+    admin = await user_db.get_user_by_email("admin@akashvanni.com")
+
     if not admin:
         try:
             await user_db.create_user(
-                email="admin@voiceai.com",
-                password="admin123",
+                email="admin@akashvanni.com",
+                password="akashvanniadmin",
                 name="Admin",
                 role="admin"
             )
-            print("✓ Admin user created: admin@voiceai.com / admin123")
+            print("✓ Admin user created: admin@akashvanni.com")
         except Exception as e:
             print(f"Warning: Could not create admin user: {e}")

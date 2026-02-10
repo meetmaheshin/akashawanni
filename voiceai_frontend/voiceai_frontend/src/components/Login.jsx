@@ -36,7 +36,7 @@ const Login = () => {
             <LogIn className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-gray-600 mt-2">Sign in to your VoiceAI account</p>
+          <p className="text-gray-600 mt-2">Sign in to your Akashvanni account</p>
         </div>
 
         {error && (
@@ -101,7 +101,7 @@ const Login = () => {
 
         <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-500 text-center">
-            Admin Login: admin@voiceai.com / voiceaiadmin
+            Admin Login: admin@akashvanni.com / akashvanniadmin
           </p>
         </div>
       </div>

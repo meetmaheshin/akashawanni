@@ -194,7 +194,7 @@ async def lifespan(app: FastAPI):
     
     # Pre-initialize knowledge base
     try:
-        initialize_kb("ailancers")
+        initialize_kb("Akashvanni")
         print("✓ KB pre-loaded")
     except Exception as e:
         print(f"Warning: Could not pre-load KB: {e}")
@@ -473,7 +473,7 @@ async def handle_incoming_call(request: Request):
     response = VoiceResponse()
     
     response.say(
-        "Hello! I'm Mira from AILancers. How can I help you today?",
+        "Hello! I'm आरती from Akashvanni. How can I help you today?",
         voice="Polly.Joanna"
     )
     
@@ -490,12 +490,12 @@ async def handle_incoming_call(request: Request):
     return Response(content=str(response), media_type="application/xml")
 
 # @app.post("/voice/outbound-twiml")
-# async def outbound_twiml(kb_id: str = "ailancers"):
+# async def outbound_twiml(kb_id: str = "Akashvanni"):
 #     """Serve TwiML for outbound calls with media stream"""
 #     response = VoiceResponse()
     
 #     response.say(
-#         "Hello! This is Mira from AILancers calling you.",
+#         "Hello! This is आरती from Akashvanni calling you.",
 #         voice="Polly.Joanna"
 #     )
     
@@ -515,9 +515,9 @@ async def handle_incoming_call(request: Request):
 @app.post("/api/call")
 async def make_outbound_call(
     to_number: str, 
-    kb_id: str = "ailancers",
+    kb_id: str = "Akashvanni",
     kb_name: str = None,
-    welcome_message: str = "Hello! This is Mira from AILancers calling you.",
+    welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -663,7 +663,7 @@ async def create_campaign(
     phone_numbers: str,  # Comma-separated or newline-separated
     kb_id: str,
     kb_name: Optional[str] = None,
-    welcome_message: str = "Hello! This is Mira from AILancers calling you.",
+    welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
     chunk_size: int = 10,
     retry_failed: bool = True,
@@ -721,9 +721,9 @@ async def create_campaign(
 async def create_campaign_with_file(
     file: UploadFile = File(...),
     name: str = None,
-    kb_id: str = "ailancers",
+    kb_id: str = "Akashvanni",
     kb_name: Optional[str] = None,
-    welcome_message: str = "Hello! This is Mira from AILancers calling you.",
+    welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
     chunk_size: int = 10,
     retry_failed: bool = True,
@@ -1200,7 +1200,7 @@ async def make_single_call(
 # async def make_outbound_call_legacy(request: dict):
 #     """Legacy endpoint - Initiate outbound call"""
 #     to_number = request.get("to_number")
-#     kb_id = request.get("kb_id", "ailancers")
+#     kb_id = request.get("kb_id", "Akashvanni")
 #     server_url = request.get('server_url', "https://kathlyn-clamatorial-manda.ngrok-free.dev")
     
 #     if not to_number:
@@ -1209,7 +1209,7 @@ async def make_single_call(
 #     server_url = server_url.rstrip('/')
     
 #     twiml = VoiceResponse()
-#     twiml.say("Hello! This is Mira from AILancers calling you.", voice="Polly.Joanna")
+#     twiml.say("Hello! This is आरती from Akashvanni calling you.", voice="Polly.Joanna")
 #     twiml.pause(length=1)
     
 #     connect = Connect()
@@ -1244,7 +1244,7 @@ async def media_stream_handler(websocket: WebSocket):
     print(f"[WS] Client: {websocket.client}")
 
     # Default values - will be updated from start event
-    kb_id = "ailancers"
+    kb_id = "Akashvanni"
     language = "en"
     voice_id = None
     deepgram_language = "en"
@@ -1289,7 +1289,7 @@ async def media_stream_handler(websocket: WebSocket):
 
                 # Extract custom parameters from start event
                 custom_params = data["start"].get("customParameters", {})
-                kb_id = custom_params.get("kb_id", "ailancers")
+                kb_id = custom_params.get("kb_id", "Akashvanni")
                 language = custom_params.get("language", "en")
 
                 print(f"[WS] ✓ Stream STARTED: streamSid={stream_sid}, callSid={call_sid}")
@@ -1616,9 +1616,9 @@ async def process_transcript(websocket, transcript, conversation_history, kb_id,
         
         # Set system prompt based on language
         if language == "hi":
-            base_prompt = "आप मीरा हैं, AILancers.ai के लिए एक सहायक AI असिस्टेंट। आप फोन कॉल पर हैं - जवाब 1-2 संक्षिप्त वाक्यों में दें।"
+            base_prompt = "आप मीरा हैं, Akashvanni.ai के लिए एक सहायक AI असिस्टेंट। आप फोन कॉल पर हैं - जवाब 1-2 संक्षिप्त वाक्यों में दें।"
         else:
-            base_prompt = "You are Mira, a helpful AI assistant for AILancers.ai. You're on a phone call - keep responses to 1-2 brief sentences."
+            base_prompt = "You are आरती, a helpful AI assistant for Akashvanni.ai. You're on a phone call - keep responses to 1-2 brief sentences."
         
         if kb_id and kb_id != "general":
             context = await asyncio.to_thread(get_kb_context_fast, kb_id, user_message, 2)

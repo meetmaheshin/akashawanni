@@ -20,7 +20,7 @@ const Campaigns = () => {
   const [kbFile, setKbFile] = useState(null);
   const [kbId, setKbId] = useState('');
   const [kbName, setKbName] = useState('');
-  const [welcomeMessage, setWelcomeMessage] = useState('Hello! This is Mira from AILancers calling you.');
+  const [welcomeMessage, setWelcomeMessage] = useState('Hello! This is आरती from Akashvanni calling you.');
   const [language, setLanguage] = useState('en');
   const [chunkSize, setChunkSize] = useState(10);
   const [inputMethod, setInputMethod] = useState('text'); // 'text' or 'file'
@@ -209,7 +209,7 @@ const Campaigns = () => {
       setKbFile(null);
       setKbId('');
       setKbName('');
-      setWelcomeMessage('Hello! This is Mira from AILancers calling you.');
+      setWelcomeMessage('Hello! This is आरती from Akashvanni calling you.');
       setLanguage('en');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -604,7 +604,7 @@ const Campaigns = () => {
                     type="button"
                     onClick={() => {
                       setLanguage('en');
-                      setWelcomeMessage('Hello! This is Mira from AILancers calling you.');
+                      setWelcomeMessage('Hello! This is आरती from Akashvanni calling you.');
                     }}
                     className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
                       language === 'en'
@@ -618,7 +618,7 @@ const Campaigns = () => {
                     type="button"
                     onClick={() => {
                       setLanguage('hi');
-                      setWelcomeMessage('नमस्ते! मैं AILancers से मीरा हूं।');
+                      setWelcomeMessage('नमस्ते! मैं आकाशवाणी से मीरा हूं।');
                     }}
                     className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
                       language === 'hi'

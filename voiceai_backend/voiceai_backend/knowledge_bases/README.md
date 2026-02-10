@@ -4,7 +4,7 @@ This directory contains text files for different knowledge bases used by the voi
 
 ## File Format
 
-- Each knowledge base is a `.txt` file named after the KB identifier (e.g., `ailancers.txt`)
+- Each knowledge base is a `.txt` file named after the KB identifier (e.g., `Akashvanni.txt`)
 - Each line in the file represents a separate knowledge entry
 - Empty lines are ignored
 - Use UTF-8 encoding
@@ -20,7 +20,7 @@ This directory contains text files for different knowledge bases used by the voi
 
 ```
 knowledge_bases/
-├── ailancers.txt       # AILancers marketplace info
+├── Akashvanni.txt       # Akashvanni marketplace info
 ├── ecommerce.txt       # E-commerce related knowledge
 └── support.txt         # Customer support FAQs
 ```

@@ -49,7 +49,7 @@ const Signup = () => {
             <UserPlus className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-gray-600 mt-2">Sign up for VoiceAI</p>
+          <p className="text-gray-600 mt-2">Sign up for Akashvanni</p>
         </div>
 
         {error && (

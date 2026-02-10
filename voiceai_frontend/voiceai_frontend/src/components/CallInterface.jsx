@@ -7,7 +7,7 @@ const CallInterface = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [kbId, setKbId] = useState('');
   const [language, setLanguage] = useState('en');
-  const [welcomeMessage, setWelcomeMessage] = useState('Hello! This is Mira from AILancers calling you.');
+  const [welcomeMessage, setWelcomeMessage] = useState('Hello! This is आरती from Akashvanni calling you.');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState(null);
@@ -18,9 +18,9 @@ const CallInterface = () => {
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
     if (lang === 'hi') {
-      setWelcomeMessage('नमस्ते! मैं AILancers से मीरा हूं।');
+      setWelcomeMessage('नमस्ते! मैं Akashvanni से मीरा हूं।');
     } else {
-      setWelcomeMessage('Hello! This is Mira from AILancers calling you.');
+      setWelcomeMessage('Hello! This is आरती from Akashvanni calling you.');
     }
   };
 
