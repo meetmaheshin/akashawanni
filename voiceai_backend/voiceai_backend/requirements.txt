@@ -21,3 +21,4 @@ certifi
 starlette==0.50.0
 sarvamai
 razorpay==1.4.2
+setuptools
