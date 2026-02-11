@@ -10,7 +10,11 @@ import os
 SMTP_HOST = "smtp.hostinger.com"
 SMTP_PORT = 465
 SMTP_EMAIL = "admin@akashvanni.com"
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+
+
+def _get_smtp_password():
+    """Get SMTP password at runtime (not module load time)"""
+    return os.getenv("SMTP_PASSWORD")
 
 # Branded email wrapper
 BRAND_COLOR = "#4f46e5"
@@ -61,7 +65,8 @@ def generate_verification_code() -> str:
 
 def _send_email(to_email: str, subject: str, html: str):
     """Send email via SMTP (runs in background thread)"""
-    if not SMTP_PASSWORD:
+    smtp_password = _get_smtp_password()
+    if not smtp_password:
         print(f"✗ SMTP_PASSWORD not set, skipping email to {to_email}")
         return
 
@@ -73,7 +78,7 @@ def _send_email(to_email: str, subject: str, html: str):
         msg.attach(MIMEText(html, "html"))
 
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.login(SMTP_EMAIL, smtp_password)
             server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
 
         print(f"✓ Email sent to {to_email}: {subject}")
