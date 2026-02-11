@@ -2,6 +2,7 @@
 import smtplib
 import random
 import string
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
@@ -17,8 +18,8 @@ def generate_verification_code() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 
-def send_verification_email(to_email: str, code: str, user_name: str) -> bool:
-    """Send verification email with 6-digit code"""
+def _send_email_sync(to_email: str, code: str, user_name: str):
+    """Actually send the email (runs in a background thread)"""
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"Akashvanni - Verify Your Email ({code})"
@@ -48,13 +49,21 @@ def send_verification_email(to_email: str, code: str, user_name: str) -> bool:
 
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
 
         print(f"✓ Verification email sent to {to_email}")
-        return True
 
     except Exception as e:
         print(f"✗ Failed to send verification email to {to_email}: {e}")
-        return False
+
+
+def send_verification_email(to_email: str, code: str, user_name: str):
+    """Send verification email in a background thread (non-blocking)"""
+    thread = threading.Thread(
+        target=_send_email_sync,
+        args=(to_email, code, user_name),
+        daemon=True
+    )
+    thread.start()
