@@ -1,9 +1,14 @@
 # Razorpay Payment Integration
-import razorpay
 import os
 from typing import Optional
 from datetime import datetime
 from dotenv import load_dotenv
+
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
+    print("⚠️ razorpay package not available (missing pkg_resources/setuptools). Payment features disabled.")
 
 load_dotenv()
 
@@ -13,7 +18,7 @@ RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
 # Initialize Razorpay client
 razorpay_client = None
-if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+if razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 else:
     print("⚠️ Razorpay credentials not configured. Payment features will be disabled.")
@@ -88,7 +93,7 @@ class PaymentService:
             
             razorpay_client.utility.verify_payment_signature(params_dict)
             return True
-        except razorpay.errors.SignatureVerificationError:
+        except Exception:
             return False
     
     @staticmethod
