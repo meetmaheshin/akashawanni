@@ -5,6 +5,34 @@ import {
   Phone, Plus, RefreshCw, Trash2, Eye, Download, Wallet 
 } from 'lucide-react';
 
+// Voice options per TTS engine (same as CallInterface)
+const TTS_VOICES = {
+  cartesia: {
+    en: [{ id: '', label: 'Default (English)' }],
+    hi: [{ id: '', label: 'Default (Hindi)' }],
+  },
+  sarvam: {
+    hi: [
+      { id: 'anushka', label: 'Anushka (Female)' },
+      { id: 'manisha', label: 'Manisha (Female)' },
+      { id: 'vidya', label: 'Vidya (Female)' },
+      { id: 'arya', label: 'Arya (Female)' },
+      { id: 'abhilash', label: 'Abhilash (Male)' },
+      { id: 'karun', label: 'Karun (Male)' },
+      { id: 'hitesh', label: 'Hitesh (Male)' },
+    ],
+    en: [
+      { id: 'anushka', label: 'Anushka (Female)' },
+      { id: 'manisha', label: 'Manisha (Female)' },
+      { id: 'vidya', label: 'Vidya (Female)' },
+      { id: 'arya', label: 'Arya (Female)' },
+      { id: 'abhilash', label: 'Abhilash (Male)' },
+      { id: 'karun', label: 'Karun (Male)' },
+      { id: 'hitesh', label: 'Hitesh (Male)' },
+    ],
+  },
+};
+
 const Campaigns = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -25,6 +53,8 @@ const Campaigns = () => {
   const [language, setLanguage] = useState('en');
   const [chunkSize, setChunkSize] = useState(10);
   const [inputMethod, setInputMethod] = useState('text'); // 'text' or 'file'
+  const [ttsEngine, setTtsEngine] = useState('cartesia');
+  const [ttsVoice, setTtsVoice] = useState('');
   const [uploadingKb, setUploadingKb] = useState(false);
   
   const fileInputRef = useRef(null);
@@ -184,6 +214,8 @@ const Campaigns = () => {
         formData.append('kb_name', kbName || kbId);
         formData.append('welcome_message', welcomeMessage);
         formData.append('language', language);
+        formData.append('tts_engine', ttsEngine);
+        formData.append('tts_voice', ttsVoice);
         formData.append('chunk_size', chunkSize);
         formData.append('retry_failed', 'true');
 
@@ -205,6 +237,8 @@ const Campaigns = () => {
             kb_name: kbName || kbId,
             welcome_message: welcomeMessage,
             language: language,
+            tts_engine: ttsEngine,
+            tts_voice: ttsVoice,
             chunk_size: chunkSize,
             retry_failed: true
           }
@@ -222,6 +256,8 @@ const Campaigns = () => {
       setKbName('');
       setWelcomeMessage('Hello! This is आरती from Akashvanni calling you.');
       setLanguage('en');
+      setTtsEngine('cartesia');
+      setTtsVoice('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -659,6 +695,55 @@ const Campaigns = () => {
                   </button>
                 </div>
               </div>
+
+              {/* TTS Engine */}
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  TTS Engine
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setTtsEngine('cartesia'); setTtsVoice(''); }}
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
+                      ttsEngine === 'cartesia'
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    Cartesia (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setTtsEngine('sarvam'); setTtsVoice('anushka'); }}
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
+                      ttsEngine === 'sarvam'
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    Sarvam AI
+                  </button>
+                </div>
+              </div>
+
+              {/* TTS Voice */}
+              {ttsEngine === 'sarvam' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Voice
+                  </label>
+                  <select
+                    value={ttsVoice}
+                    onChange={(e) => setTtsVoice(e.target.value)}
+                    className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    {(TTS_VOICES.sarvam[language] || TTS_VOICES.sarvam.en).map((v) => (
+                      <option key={v.id} value={v.id}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Welcome Message */}
               <div className="mb-4">

@@ -1,5 +1,5 @@
 # VoiceAI Backend with Call History & Transcript Management
-from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, File, UploadFile, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, File, UploadFile, Depends, HTTPException, status, Body
 from fastapi.responses import Response, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
@@ -401,29 +401,65 @@ class UserResponse(BaseModel):
 
 @app.post("/api/auth/signup")
 async def signup(request: SignupRequest):
-    """Register a new user"""
+    """Register a new user — sends verification email"""
     try:
         user_db = get_user_db()
-        
+
         # Check if user already exists
         existing_user = await user_db.get_user_by_email(request.email)
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
-        
-        # Create new user
+
+        # Generate verification code
+        from email_service import generate_verification_code, send_verification_email
+        code = generate_verification_code()
+
+        # Create new user (inactive until verified)
         user = await user_db.create_user(
             email=request.email,
             password=request.password,
             name=request.name,
-            role="user"
+            role="user",
+            verification_code=code
         )
-        
+
+        # Send verification email
+        send_verification_email(request.email, code, request.name)
+
+        return JSONResponse({
+            "status": "verification_required",
+            "message": "Verification code sent to your email",
+            "email": request.email
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/verify-email")
+async def verify_email(request: dict = Body(...)):
+    """Verify email with 6-digit code"""
+    try:
+        email = request.get("email")
+        code = request.get("code")
+
+        if not email or not code:
+            raise HTTPException(status_code=400, detail="Email and code are required")
+
+        user_db = get_user_db()
+        user = await user_db.verify_email_code(email, code)
+
+        if not user:
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+
         # Create access token
         access_token = create_access_token(data={"sub": user["_id"]})
-        
+
         return JSONResponse({
             "status": "success",
-            "message": "User registered successfully",
+            "message": "Email verified successfully",
             "access_token": access_token,
             "token_type": "bearer",
             "user": {
@@ -433,7 +469,41 @@ async def signup(request: SignupRequest):
                 "role": user["role"]
             }
         })
-    
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/resend-verification")
+async def resend_verification(request: dict = Body(...)):
+    """Resend verification code"""
+    try:
+        email = request.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+
+        user_db = get_user_db()
+        from email_service import generate_verification_code, send_verification_email
+
+        code = generate_verification_code()
+        updated = await user_db.resend_verification_code(email, code)
+
+        if not updated:
+            raise HTTPException(status_code=400, detail="Could not resend code. Account may already be verified.")
+
+        # Get user name for email
+        user = await user_db.get_user_by_email(email)
+        user_name = user.get("name", "User") if user else "User"
+
+        send_verification_email(email, code, user_name)
+
+        return JSONResponse({
+            "status": "success",
+            "message": "New verification code sent"
+        })
+
     except HTTPException:
         raise
     except Exception as e:
@@ -445,19 +515,32 @@ async def login(request: LoginRequest):
     """Login user"""
     try:
         user_db = get_user_db()
-        
+
         # Authenticate user
         user = await user_db.authenticate_user(request.email, request.password)
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password"
             )
-        
+
+        # If email not verified, send a new code and ask to verify
+        if not user.get("email_verified", True):
+            from email_service import generate_verification_code, send_verification_email
+            code = generate_verification_code()
+            await user_db.resend_verification_code(request.email, code)
+            send_verification_email(request.email, code, user.get("name", "User"))
+
+            return JSONResponse({
+                "status": "verification_required",
+                "message": "Please verify your email first. A new code has been sent.",
+                "email": request.email
+            })
+
         # Create access token
         access_token = create_access_token(data={"sub": user["_id"]})
-        
+
         return JSONResponse({
             "status": "success",
             "message": "Login successful",
@@ -470,7 +553,7 @@ async def login(request: LoginRequest):
                 "role": user["role"]
             }
         })
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -483,14 +566,45 @@ async def get_current_user_info(current_user: dict = Depends(get_current_active_
     # Get wallet balance
     wallet_db = get_wallet_db()
     balance = await wallet_db.get_balance(current_user["_id"])
-    
+
     return JSONResponse({
         "id": current_user["_id"],
         "email": current_user["email"],
         "name": current_user["name"],
         "role": current_user["role"],
-        "wallet_balance": balance
+        "wallet_balance": balance,
+        "phone": current_user.get("phone", ""),
+        "company_name": current_user.get("company_name", ""),
+        "gstin": current_user.get("gstin", ""),
+        "company_address": current_user.get("company_address", "")
     })
+
+
+@app.put("/api/auth/profile")
+async def update_profile(request: dict = Body(...), current_user: dict = Depends(get_current_active_user)):
+    """Update user profile"""
+    try:
+        user_db = get_user_db()
+
+        update_data = {}
+        for field in ["name", "phone", "company_name", "gstin", "company_address"]:
+            if field in request:
+                update_data[field] = request[field]
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        success = await user_db.update_user(current_user["_id"], update_data)
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update profile")
+
+        return JSONResponse({"status": "success", "message": "Profile updated"})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/users")
@@ -685,33 +799,109 @@ async def verify_payment(
                 detail="Payment already processed"
             )
         
-        # Credit wallet
+        # GST calculation: total paid includes 18% GST
+        total_amount = request.amount
+        base_amount = round(total_amount / 1.18, 2)
+        gst_amount = round(total_amount - base_amount, 2)
+
+        # Credit wallet with base amount (excluding GST)
         wallet_db = get_wallet_db()
         new_balance = await wallet_db.add_funds(
             user_id=current_user["_id"],
-            amount=request.amount,
+            amount=base_amount,
             transaction_id=request.razorpay_payment_id
         )
-        
+
+        # Generate invoice first so we can store invoice_id in transaction
+        invoice_id = None
+        try:
+            from invoices import get_invoice_db
+            invoice_db = get_invoice_db()
+            invoice = await invoice_db.create_invoice(
+                user_id=current_user["_id"],
+                transaction_id=request.razorpay_payment_id,
+                payment_id=request.razorpay_payment_id,
+                total_amount=total_amount,
+                base_amount=base_amount,
+                gst_amount=gst_amount,
+                buyer_name=current_user.get("name", ""),
+                buyer_email=current_user.get("email", ""),
+                buyer_gstin=current_user.get("gstin", ""),
+                buyer_address=current_user.get("company_address", "")
+            )
+            invoice_id = invoice["_id"]
+        except Exception as inv_err:
+            print(f"Warning: Invoice creation failed: {inv_err}")
+
         # Create transaction record
         await transaction_db.create_transaction(
             user_id=current_user["_id"],
             transaction_type="credit",
-            amount=request.amount,
-            description=f"Wallet recharge via Razorpay",
+            amount=base_amount,
+            description=f"Wallet recharge via Razorpay (₹{total_amount:.2f} incl. GST ₹{gst_amount:.2f})",
             payment_id=request.razorpay_payment_id,
             payment_method="razorpay",
             metadata={
-                "order_id": request.razorpay_order_id
+                "order_id": request.razorpay_order_id,
+                "total_amount": total_amount,
+                "base_amount": base_amount,
+                "gst_amount": gst_amount,
+                "invoice_id": invoice_id
             }
         )
-        
+
         return JSONResponse({
             "status": "success",
-            "message": f"Rs. {request.amount} credited to wallet",
-            "new_balance": new_balance
+            "message": f"₹{base_amount:.2f} credited to wallet (₹{gst_amount:.2f} GST)",
+            "new_balance": new_balance,
+            "total_paid": total_amount,
+            "wallet_credit": base_amount,
+            "gst": gst_amount,
+            "invoice_id": invoice_id
         })
     
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# INVOICE ENDPOINTS
+# ============================================================================
+
+@app.get("/api/invoices")
+async def get_invoices(current_user: dict = Depends(get_current_active_user)):
+    """Get user's invoices"""
+    try:
+        from invoices import get_invoice_db
+        invoice_db = get_invoice_db()
+        invoices = await invoice_db.get_invoices_by_user(current_user["_id"])
+        return JSONResponse({"invoices": invoices})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/invoices/{invoice_id}/download")
+async def download_invoice(invoice_id: str, current_user: dict = Depends(get_current_active_user)):
+    """Download invoice as HTML"""
+    try:
+        from invoices import get_invoice_db
+        invoice_db = get_invoice_db()
+        invoice = await invoice_db.get_invoice_by_id(invoice_id)
+
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        if invoice["user_id"] != current_user["_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        html = invoice.get("invoice_html", "")
+        return Response(
+            content=html,
+            media_type="text/html",
+            headers={"Content-Disposition": f'inline; filename="invoice_{invoice["invoice_number"]}.html"'}
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -1048,6 +1238,8 @@ async def create_campaign(
     kb_name: Optional[str] = None,
     welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
+    tts_engine: str = "cartesia",
+    tts_voice: str = "",
     chunk_size: int = 10,
     retry_failed: bool = True,
     current_user: dict = Depends(get_current_active_user)
@@ -1092,12 +1284,14 @@ async def create_campaign(
             language=language,
             chunk_size=chunk_size,
             retry_failed=retry_failed,
-            user_id=current_user["_id"]
+            user_id=current_user["_id"],
+            tts_engine=tts_engine,
+            tts_voice=tts_voice
         )
-        
+
         # Start processing campaign in background
         asyncio.create_task(process_campaign(campaign["_id"]))
-        
+
         return JSONResponse({
             "status": "success",
             "campaign_id": campaign["_id"],
@@ -1119,6 +1313,8 @@ async def create_campaign_with_file(
     kb_name: Optional[str] = None,
     welcome_message: str = "Hello! This is आरती from Akashvanni calling you.",
     language: str = "en",
+    tts_engine: str = "cartesia",
+    tts_voice: str = "",
     chunk_size: int = 10,
     retry_failed: bool = True,
     current_user: dict = Depends(get_current_active_user)
@@ -1179,12 +1375,14 @@ async def create_campaign_with_file(
             language=language,
             chunk_size=chunk_size,
             retry_failed=retry_failed,
-            user_id=current_user["_id"]
+            user_id=current_user["_id"],
+            tts_engine=tts_engine,
+            tts_voice=tts_voice
         )
-        
+
         # Start processing campaign in background
         asyncio.create_task(process_campaign(campaign["_id"]))
-        
+
         return JSONResponse({
             "status": "success",
             "campaign_id": campaign["_id"],
@@ -1439,8 +1637,10 @@ async def process_campaign(campaign_id: str):
         kb_name = campaign["knowledge_base_name"]
         welcome_message = campaign["welcome_message"]
         language = campaign["language"]
-        
-        print(f"✓ Processing campaign: {campaign['name']} ({len(phone_numbers)} numbers)")
+        tts_engine = campaign.get("tts_engine", "cartesia")
+        tts_voice = campaign.get("tts_voice", "")
+
+        print(f"✓ Processing campaign: {campaign['name']} ({len(phone_numbers)} numbers, tts={tts_engine})")
         
         # Process numbers in chunks
         for i in range(0, len(phone_numbers), chunk_size):
@@ -1458,7 +1658,9 @@ async def process_campaign(campaign_id: str):
                     language=language,
                     campaign_id=campaign_id,
                     campaign_db=campaign_db,
-                    call_history_db=call_history_db
+                    call_history_db=call_history_db,
+                    tts_engine=tts_engine,
+                    tts_voice=tts_voice
                 )
                 tasks.append(task)
             
@@ -1505,7 +1707,9 @@ async def make_single_call(
     language: str,
     campaign_id: str,
     campaign_db: CampaignDB,
-    call_history_db: CallHistoryDB
+    call_history_db: CallHistoryDB,
+    tts_engine: str = "cartesia",
+    tts_voice: str = ""
 ):
     """Make a single call as part of a campaign"""
     try:
@@ -1533,6 +1737,8 @@ async def make_single_call(
         # Add custom parameters
         stream.parameter(name='kb_id', value=kb_id)
         stream.parameter(name='language', value=language)
+        stream.parameter(name='tts_engine', value=tts_engine)
+        stream.parameter(name='tts_voice', value=tts_voice)
         stream.parameter(name='campaign_id', value=campaign_id)
         
         connect.append(stream)

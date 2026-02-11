@@ -199,7 +199,16 @@ async def connect_to_mongodb():
         # Initialize campaign database
         from campaigns import initialize_campaign_db
         initialize_campaign_db(mongodb_database)
-        
+
+        # Initialize invoice database
+        from invoices import initialize_invoice_db
+        initialize_invoice_db(mongodb_database)
+
+        # Create indexes for invoices collection
+        invoices_collection = mongodb_database["invoices"]
+        await invoices_collection.create_index([("user_id", ASCENDING)])
+        await invoices_collection.create_index([("created_at", DESCENDING)])
+
         # Test connection
         await mongodb_client.admin.command('ping')
         print("✓ MongoDB connected successfully")

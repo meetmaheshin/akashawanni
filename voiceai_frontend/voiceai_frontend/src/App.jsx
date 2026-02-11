@@ -9,6 +9,7 @@ import CallInterface from './components/CallInterface';
 import CallHistory from './components/CallHistory';
 import Campaigns from './components/Campaigns';
 import WalletWidget from './components/WalletWidget';
+import Profile from './components/Profile';
 
 function App() {
   return (
@@ -51,6 +52,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Campaigns />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             }
           />
@@ -116,7 +125,7 @@ function Navigation() {
             <WalletWidget />
 
             <div className="flex items-center space-x-3 pl-4 border-l border-gray-300">
-              <div className="flex items-center space-x-2 text-gray-700">
+              <Link to="/profile" className="flex items-center space-x-2 text-gray-700 hover:text-primary-600 transition-colors">
                 {isAdmin() ? (
                   <Shield className="w-5 h-5 text-yellow-600" />
                 ) : (
@@ -128,7 +137,7 @@ function Navigation() {
                     Admin
                   </span>
                 )}
-              </div>
+              </Link>
               
               <button
                 onClick={logout}

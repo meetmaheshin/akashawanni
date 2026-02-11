@@ -45,8 +45,12 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
+      if (response.data.status === 'verification_required') {
+        return { success: false, verificationRequired: true, email: response.data.email, error: response.data.message };
+      }
+
       const { access_token, user: userData } = response.data;
-      
+
       localStorage.setItem('voiceai_token', access_token);
       setToken(access_token);
       setUser(userData);
@@ -69,8 +73,12 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
+      if (response.data.status === 'verification_required') {
+        return { success: false, verificationRequired: true, email: response.data.email };
+      }
+
       const { access_token, user: userData } = response.data;
-      
+
       localStorage.setItem('voiceai_token', access_token);
       setToken(access_token);
       setUser(userData);
@@ -82,6 +90,31 @@ export const AuthProvider = ({ children }) => {
         success: false,
         error: error.response?.data?.detail || 'Signup failed'
       };
+    }
+  };
+
+  const verifyEmail = async (email, code) => {
+    try {
+      const response = await axios.post(`/api/auth/verify-email`, { email, code });
+
+      const { access_token, user: userData } = response.data;
+
+      localStorage.setItem('voiceai_token', access_token);
+      setToken(access_token);
+      setUser(userData);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.detail || 'Verification failed' };
+    }
+  };
+
+  const resendVerification = async (email) => {
+    try {
+      await axios.post(`/api/auth/resend-verification`, { email });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.detail || 'Failed to resend code' };
     }
   };
 
@@ -103,6 +136,8 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         signup,
+        verifyEmail,
+        resendVerification,
         logout,
         isAdmin,
         isAuthenticated: !!user

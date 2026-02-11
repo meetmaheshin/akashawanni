@@ -22,7 +22,9 @@ class CampaignDB:
         language: str = "en",
         chunk_size: int = 10,
         retry_failed: bool = True,
-        user_id: str = None
+        user_id: str = None,
+        tts_engine: str = "cartesia",
+        tts_voice: str = ""
     ) -> Dict:
         """Create a new calling campaign"""
         
@@ -37,6 +39,8 @@ class CampaignDB:
             "chunk_size": chunk_size,
             "retry_failed": retry_failed,
             "user_id": user_id,
+            "tts_engine": tts_engine,
+            "tts_voice": tts_voice,
             "status": "pending",  # pending, processing, completed, failed, paused
             "progress": {
                 "total": len(phone_numbers),

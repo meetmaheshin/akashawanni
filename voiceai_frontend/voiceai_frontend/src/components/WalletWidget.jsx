@@ -132,14 +132,16 @@ const WalletModal = ({ balance, onClose, onBalanceUpdate }) => {
         handler: async (response) => {
           try {
             // Verify payment
-            await axios.post('/api/payment/verify', {
+            const verifyRes = await axios.post('/api/payment/verify', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               amount: rechargeAmount
             });
 
-            alert(`₹${rechargeAmount} added to wallet successfully!`);
+            const walletCredit = verifyRes.data.wallet_credit;
+            const gstAmt = verifyRes.data.gst;
+            alert(`₹${walletCredit?.toFixed(2)} credited to wallet (GST: ₹${gstAmt?.toFixed(2)})`);
             onBalanceUpdate();
             setAmount('');
             setActiveTab('transactions');
@@ -292,17 +294,38 @@ const WalletModal = ({ balance, onClose, onBalanceUpdate }) => {
                 </div>
               </div>
 
+              {/* GST Breakdown Preview */}
+              {amount && parseFloat(amount) >= 10 && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Payment Breakdown</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>You Pay</span>
+                      <span>₹{parseFloat(amount).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>GST (18%)</span>
+                      <span>-₹{(parseFloat(amount) - parseFloat(amount) / 1.18).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-green-700 border-t border-gray-300 pt-1 mt-1">
+                      <span>Wallet Credit</span>
+                      <span>₹{(parseFloat(amount) / 1.18).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleRecharge}
                 disabled={loading || !amount || parseFloat(amount) < 10}
                 className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
               >
-                {loading ? 'Processing...' : `Add ₹${amount || '0'} to Wallet`}
+                {loading ? 'Processing...' : `Pay ₹${amount || '0'} (Credit ₹${amount ? (parseFloat(amount) / 1.18).toFixed(2) : '0'})`}
               </button>
 
               <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> You'll be redirected to Razorpay for secure payment. 
+                  <strong>Note:</strong> 18% GST is included in all payments.
                   Minimum recharge amount is ₹10.
                 </p>
               </div>
@@ -351,12 +374,23 @@ const WalletModal = ({ balance, onClose, onBalanceUpdate }) => {
                           </p>
                         </div>
                       </div>
-                      <div className={`font-bold ${
-                        txn.transaction_type === 'credit' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}>
-                        {txn.transaction_type === 'credit' ? '+' : '-'}₹{txn.amount.toFixed(2)}
+                      <div className="flex items-center gap-2">
+                        {txn.transaction_type === 'credit' && txn.metadata?.invoice_id && (
+                          <button
+                            onClick={() => window.open(`/api/invoices/${txn.metadata.invoice_id}/download`, '_blank')}
+                            className="p-1 text-gray-400 hover:text-primary-600 transition-colors"
+                            title="Download Invoice"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
+                        <div className={`font-bold ${
+                          txn.transaction_type === 'credit'
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }`}>
+                          {txn.transaction_type === 'credit' ? '+' : '-'}₹{txn.amount.toFixed(2)}
+                        </div>
                       </div>
                     </div>
                   ))}

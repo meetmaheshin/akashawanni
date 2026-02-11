@@ -1,6 +1,6 @@
 # User Management Database Operations
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import os
 import hashlib
@@ -38,17 +38,26 @@ class UserDB:
         except:
             pass
     
-    async def create_user(self, email: str, password: str, name: str, role: str = "user") -> dict:
+    async def create_user(self, email: str, password: str, name: str, role: str = "user",
+                          verification_code: str = None) -> dict:
         """Create a new user"""
         hashed_password = get_password_hash(password)
-        
+
+        is_admin = role == "admin"
         user = {
             "email": email,
             "password": hashed_password,
             "name": name,
             "role": role,  # "user" or "admin"
             "created_at": datetime.utcnow(),
-            "is_active": True
+            "is_active": is_admin,  # admin active immediately, users need email verification
+            "email_verified": is_admin,  # admin verified immediately
+            "verification_code": verification_code if not is_admin else None,
+            "verification_code_expiry": (datetime.utcnow() + timedelta(minutes=10)) if (verification_code and not is_admin) else None,
+            "phone": "",
+            "company_name": "",
+            "gstin": "",
+            "company_address": ""
         }
         
         result = await self.collection.insert_one(user)
@@ -92,23 +101,71 @@ class UserDB:
             return None
     
     async def authenticate_user(self, email: str, password: str) -> Optional[dict]:
-        """Authenticate user with email and password"""
+        """Authenticate user with email and password.
+        Returns user dict with email_verified flag. Caller should check email_verified."""
         user = await self.get_user_by_email(email)
-        
+
         if not user:
             return None
-        
+
         if not verify_password(password, user["password"]):
             return None
-        
-        if not user.get("is_active", True):
-            return None
-        
+
         # Remove password from returned object
         user.pop("password")
-        
+
         return user
     
+    async def verify_email_code(self, email: str, code: str) -> dict:
+        """Verify email with 6-digit code. Returns user dict on success, None on failure."""
+        user = await self.get_user_by_email(email)
+        if not user:
+            return None
+
+        if user.get("email_verified"):
+            return user  # already verified
+
+        stored_code = user.get("verification_code")
+        expiry = user.get("verification_code_expiry")
+
+        if not stored_code or stored_code != code:
+            return None
+
+        if expiry and datetime.utcnow() > expiry:
+            return None  # expired
+
+        from bson import ObjectId
+        await self.collection.update_one(
+            {"_id": ObjectId(user["_id"])},
+            {"$set": {
+                "email_verified": True,
+                "is_active": True,
+                "verification_code": None,
+                "verification_code_expiry": None
+            }}
+        )
+
+        user["email_verified"] = True
+        user["is_active"] = True
+        user.pop("password", None)
+        return user
+
+    async def resend_verification_code(self, email: str, new_code: str) -> bool:
+        """Update verification code for a user"""
+        user = await self.get_user_by_email(email)
+        if not user or user.get("email_verified"):
+            return False
+
+        from bson import ObjectId
+        result = await self.collection.update_one(
+            {"_id": ObjectId(user["_id"])},
+            {"$set": {
+                "verification_code": new_code,
+                "verification_code_expiry": datetime.utcnow() + timedelta(minutes=10)
+            }}
+        )
+        return result.modified_count > 0
+
     async def update_user(self, user_id: str, update_data: dict) -> bool:
         """Update user information"""
         from bson import ObjectId
