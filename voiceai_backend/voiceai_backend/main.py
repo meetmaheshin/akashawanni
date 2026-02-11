@@ -579,6 +579,17 @@ async def set_call_rate(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CreateOrderRequest(BaseModel):
+    amount: float
+
+
+class PaymentVerificationRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    amount: float
+
+
 @app.get("/api/payment/razorpay-key")
 async def get_razorpay_key():
     """Get Razorpay key for frontend integration"""
@@ -599,7 +610,7 @@ async def get_razorpay_key():
 
 @app.post("/api/payment/create-order")
 async def create_payment_order(
-    amount: float,
+    request: CreateOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
     """Create Razorpay order for wallet recharge"""
@@ -611,7 +622,7 @@ async def create_payment_order(
             )
         
         # Validate minimum amount
-        if amount < PaymentService.MINIMUM_AMOUNT:
+        if request.amount < PaymentService.MINIMUM_AMOUNT:
             raise HTTPException(
                 status_code=400,
                 detail=f"Minimum recharge amount is Rs. {PaymentService.MINIMUM_AMOUNT}"
@@ -619,7 +630,7 @@ async def create_payment_order(
         
         # Create Razorpay order
         order = await PaymentService.create_order(
-            amount=amount,
+            amount=request.amount,
             user_id=current_user["_id"]
         )
         
@@ -634,13 +645,6 @@ async def create_payment_order(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-class PaymentVerificationRequest(BaseModel):
-    razorpay_order_id: str
-    razorpay_payment_id: str
-    razorpay_signature: str
-    amount: float
 
 
 @app.post("/api/payment/verify")

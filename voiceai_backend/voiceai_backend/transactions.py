@@ -70,6 +70,8 @@ class TransactionDB:
         
         for txn in transactions:
             txn["_id"] = str(txn["_id"])
+            if "created_at" in txn and isinstance(txn["created_at"], datetime):
+                txn["created_at"] = txn["created_at"].isoformat()
         
         return transactions
     

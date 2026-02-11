@@ -169,10 +169,23 @@ const WalletModal = ({ balance, onClose, onBalanceUpdate }) => {
 
   const downloadTransactions = async () => {
     try {
-      const token = localStorage.getItem('voiceai_token');
-      window.open(`/api/transactions/download?token=${token}`, '_blank');
+      const response = await axios.get('/api/transactions/download', {
+        responseType: 'blob'
+      });
+      
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'transactions.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download transactions:', error);
+      alert('Failed to download transactions. Please try again.');
     }
   };
 

@@ -43,7 +43,10 @@ class PaymentService:
         amount_paise = int(amount * 100)
         
         if not receipt_id:
-            receipt_id = f"wallet_recharge_{user_id}_{int(datetime.utcnow().timestamp())}"
+            # Keep receipt under 40 chars: wr_<last8_of_userid>_<timestamp>
+            user_suffix = str(user_id)[-8:]
+            timestamp = int(datetime.utcnow().timestamp())
+            receipt_id = f"wr_{user_suffix}_{timestamp}"
         
         # Create order
         order_data = {
