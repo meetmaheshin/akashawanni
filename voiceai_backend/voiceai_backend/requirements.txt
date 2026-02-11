@@ -20,3 +20,4 @@ pymongo==4.16.0
 certifi
 starlette==0.50.0
 sarvamai
+razorpay==1.4.2

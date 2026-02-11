@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Phone, Upload, FileText, Loader2, CheckCircle, AlertCircle, PhoneCall } from 'lucide-react';
+import { Phone, Upload, FileText, Loader2, CheckCircle, AlertCircle, PhoneCall, Wallet } from 'lucide-react';
 
 // Voice options per TTS engine
 const TTS_VOICES = {
@@ -46,11 +46,26 @@ const CallInterface = () => {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
   const fileInputRef = useRef(null);
 
   // Get available voices for current engine + language
   const getAvailableVoices = () => {
     return TTS_VOICES[ttsEngine]?.[language] || [];
+  };
+  
+  // Load wallet balance
+  useEffect(() => {
+    loadWalletBalance();
+  }, []);
+
+  const loadWalletBalance = async () => {
+    try {
+      const response = await axios.get('/api/wallet/balance');
+      setWalletBalance(response.data.balance);
+    } catch (error) {
+      console.error('Failed to load wallet balance:', error);
+    }
   };
 
   // Update welcome message when language changes
@@ -166,6 +181,24 @@ const CallInterface = () => {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Low Balance Warning */}
+      {walletBalance < 10 && (
+        <div className="glass-effect rounded-xl shadow-lg p-4 mb-6 bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <Wallet className="w-8 h-8 text-red-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-800">Low Wallet Balance</h3>
+              <p className="text-sm text-red-700">
+                Your current balance is ₹{walletBalance.toFixed(2)}. 
+                You need at least ₹10 to make calls. Please recharge your wallet.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="glass-effect rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-4">

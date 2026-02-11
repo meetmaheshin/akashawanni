@@ -31,6 +31,9 @@ from database import connect_to_mongodb, close_mongodb_connection, get_call_hist
 from campaigns import get_campaign_db, CampaignDB
 from users import get_user_db, initialize_user_db, create_admin_user, UserDB
 from auth import create_access_token, get_current_active_user, get_admin_user, is_admin
+from wallet import get_wallet_db, initialize_wallet_db
+from transactions import get_transaction_db, initialize_transaction_db
+from payments import PaymentService
 from typing import Optional
 import shutil
 import aiofiles
@@ -232,6 +235,11 @@ async def lifespan(app: FastAPI):
     db = get_database()
     await initialize_user_db(db)
     await create_admin_user()
+    
+    # Initialize wallet and transaction databases
+    await initialize_wallet_db()
+    await initialize_transaction_db()
+    print("✓ Wallet and transaction databases initialized")
     
     # Pre-initialize knowledge base
     try:
@@ -471,12 +479,17 @@ async def login(request: LoginRequest):
 
 @app.get("/api/auth/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_active_user)):
-    """Get current user information"""
+    """Get current user information with wallet balance"""
+    # Get wallet balance
+    wallet_db = get_wallet_db()
+    balance = await wallet_db.get_balance(current_user["_id"])
+    
     return JSONResponse({
         "id": current_user["_id"],
         "email": current_user["email"],
         "name": current_user["name"],
-        "role": current_user["role"]
+        "role": current_user["role"],
+        "wallet_balance": balance
     })
 
 
@@ -505,6 +518,316 @@ async def get_all_users(
 
 # ============================================================================
 # END AUTHENTICATION ENDPOINTS
+# ============================================================================
+
+
+# ============================================================================
+# WALLET & PAYMENT ENDPOINTS
+# ============================================================================
+
+@app.get("/api/wallet/balance")
+async def get_wallet_balance(current_user: dict = Depends(get_current_active_user)):
+    """Get current wallet balance"""
+    try:
+        wallet_db = get_wallet_db()
+        balance = await wallet_db.get_balance(current_user["_id"])
+        
+        return JSONResponse({
+            "balance": balance,
+            "currency": "INR"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/wallet/call-rate")
+async def get_call_rate():
+    """Get current call rate per minute"""
+    try:
+        wallet_db = get_wallet_db()
+        rate = await wallet_db.get_call_rate_per_minute()
+        
+        return JSONResponse({
+            "rate_per_minute": rate,
+            "currency": "INR"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/wallet/set-call-rate")
+async def set_call_rate(
+    rate: float,
+    current_user: dict = Depends(get_admin_user)
+):
+    """Set call rate per minute (admin only)"""
+    try:
+        if rate <= 0:
+            raise HTTPException(status_code=400, detail="Rate must be positive")
+        
+        wallet_db = get_wallet_db()
+        await wallet_db.set_call_rate_per_minute(rate)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": f"Call rate updated to Rs. {rate} per minute",
+            "rate_per_minute": rate
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/payment/razorpay-key")
+async def get_razorpay_key():
+    """Get Razorpay key for frontend integration"""
+    try:
+        if not PaymentService.is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Payment service is not configured. Please contact administrator."
+            )
+        
+        key = PaymentService.get_razorpay_key()
+        return JSONResponse({"razorpay_key": key})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/payment/create-order")
+async def create_payment_order(
+    amount: float,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """Create Razorpay order for wallet recharge"""
+    try:
+        if not PaymentService.is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Payment service is not configured. Please contact administrator."
+            )
+        
+        # Validate minimum amount
+        if amount < PaymentService.MINIMUM_AMOUNT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Minimum recharge amount is Rs. {PaymentService.MINIMUM_AMOUNT}"
+            )
+        
+        # Create Razorpay order
+        order = await PaymentService.create_order(
+            amount=amount,
+            user_id=current_user["_id"]
+        )
+        
+        return JSONResponse({
+            "status": "success",
+            "order": order
+        })
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PaymentVerificationRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    amount: float
+
+
+@app.post("/api/payment/verify")
+async def verify_payment(
+    request: PaymentVerificationRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """Verify Razorpay payment and credit wallet"""
+    try:
+        if not PaymentService.is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Payment service is not configured"
+            )
+        
+        # Verify payment signature
+        is_valid = PaymentService.verify_payment_signature(
+            razorpay_order_id=request.razorpay_order_id,
+            razorpay_payment_id=request.razorpay_payment_id,
+            razorpay_signature=request.razorpay_signature
+        )
+        
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid payment signature"
+            )
+        
+        # Check if payment already processed
+        transaction_db = get_transaction_db()
+        existing_txn = await transaction_db.get_transaction_by_payment_id(
+            request.razorpay_payment_id
+        )
+        
+        if existing_txn:
+            raise HTTPException(
+                status_code=400,
+                detail="Payment already processed"
+            )
+        
+        # Credit wallet
+        wallet_db = get_wallet_db()
+        new_balance = await wallet_db.add_funds(
+            user_id=current_user["_id"],
+            amount=request.amount,
+            transaction_id=request.razorpay_payment_id
+        )
+        
+        # Create transaction record
+        await transaction_db.create_transaction(
+            user_id=current_user["_id"],
+            transaction_type="credit",
+            amount=request.amount,
+            description=f"Wallet recharge via Razorpay",
+            payment_id=request.razorpay_payment_id,
+            payment_method="razorpay",
+            metadata={
+                "order_id": request.razorpay_order_id
+            }
+        )
+        
+        return JSONResponse({
+            "status": "success",
+            "message": f"Rs. {request.amount} credited to wallet",
+            "new_balance": new_balance
+        })
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# TRANSACTION ENDPOINTS
+# ============================================================================
+
+@app.get("/api/transactions")
+async def get_transactions(
+    transaction_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """Get transaction history"""
+    try:
+        transaction_db = get_transaction_db()
+        
+        # Admin can see all transactions, users only see their own
+        user_id = None if is_admin(current_user) else current_user["_id"]
+        
+        # Validate transaction type
+        if transaction_type and transaction_type not in ["credit", "debit"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid transaction type. Must be 'credit' or 'debit'"
+            )
+        
+        transactions = await transaction_db.get_transactions(
+            user_id=user_id,
+            transaction_type=transaction_type,
+            limit=limit,
+            skip=offset
+        )
+        
+        total = await transaction_db.get_total_count(
+            user_id=user_id,
+            transaction_type=transaction_type
+        )
+        
+        # Get summary if fetching user's own transactions
+        summary = None
+        if user_id:
+            summary = await transaction_db.get_user_balance_summary(user_id)
+        
+        return JSONResponse({
+            "transactions": transactions,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "summary": summary
+        })
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/transactions/download")
+async def download_transactions(
+    transaction_type: Optional[str] = None,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """Download transaction history as CSV"""
+    import io
+    
+    try:
+        transaction_db = get_transaction_db()
+        
+        # Admin can download all, users only their own
+        user_id = None if is_admin(current_user) else current_user["_id"]
+        
+        # Get all transactions (no limit)
+        transactions = await transaction_db.get_transactions(
+            user_id=user_id,
+            transaction_type=transaction_type,
+            limit=10000,
+            skip=0
+        )
+        
+        # Build CSV content
+        csv_lines = []
+        csv_lines.append("Date,Type,Amount (Rs.),Description,Payment ID,Call SID,Campaign ID")
+        
+        for txn in transactions:
+            date = txn.get("created_at", "")
+            txn_type = txn.get("transaction_type", "").upper()
+            amount = txn.get("amount", 0)
+            description = txn.get("description", "").replace('"', '""')
+            payment_id = txn.get("payment_id", "")
+            call_sid = txn.get("call_sid", "")
+            campaign_id = txn.get("campaign_id", "")
+            
+            csv_lines.append(f'"{date}","{txn_type}",{amount},"{description}","{payment_id}","{call_sid}","{campaign_id}"')
+        
+        csv_content = "\n".join(csv_lines)
+        
+        # Return as downloadable CSV
+        filename = f"transactions_{current_user['name'].replace(' ', '_')}.csv" if user_id else "all_transactions.csv"
+        
+        return StreamingResponse(
+            io.StringIO(csv_content),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# END WALLET & PAYMENT ENDPOINTS
 # ============================================================================
 
 
@@ -565,6 +888,17 @@ async def make_outbound_call(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Initiate outbound call and create call history record"""
+    
+    # Check wallet balance
+    wallet_db = get_wallet_db()
+    has_balance = await wallet_db.has_minimum_balance(current_user["_id"], minimum=10.0)
+    
+    if not has_balance:
+        current_balance = await wallet_db.get_balance(current_user["_id"])
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient wallet balance. Current balance: Rs. {current_balance:.2f}. Minimum required: Rs. 10.00"
+        )
     
     # Validate language
     if language not in LANGUAGE_CONFIG:
@@ -716,6 +1050,17 @@ async def create_campaign(
 ):
     """Create a new calling campaign"""
     try:
+        # Check wallet balance
+        wallet_db = get_wallet_db()
+        has_balance = await wallet_db.has_minimum_balance(current_user["_id"], minimum=10.0)
+        
+        if not has_balance:
+            current_balance = await wallet_db.get_balance(current_user["_id"])
+            raise HTTPException(
+                status_code=402,
+                detail=f"Insufficient wallet balance. Current balance: Rs. {current_balance:.2f}. Minimum required: Rs. 10.00"
+            )
+        
         # Parse phone numbers
         numbers_list = []
         if ',' in phone_numbers:
@@ -776,6 +1121,17 @@ async def create_campaign_with_file(
 ):
     """Create a campaign by uploading a file with phone numbers"""
     try:
+        # Check wallet balance
+        wallet_db = get_wallet_db()
+        has_balance = await wallet_db.has_minimum_balance(current_user["_id"], minimum=10.0)
+        
+        if not has_balance:
+            current_balance = await wallet_db.get_balance(current_user["_id"])
+            raise HTTPException(
+                status_code=402,
+                detail=f"Insufficient wallet balance. Current balance: Rs. {current_balance:.2f}. Minimum required: Rs. 10.00"
+            )
+        
         # Validate file type
         if not (file.filename.endswith('.txt') or file.filename.endswith('.csv')):
             raise HTTPException(status_code=400, detail="Only .txt and .csv files are allowed")
@@ -1518,7 +1874,7 @@ async def media_stream_handler(websocket: WebSocket):
         # Save final call data to MongoDB
         if call_record and call_sid:
             try:
-                call_duration = time.time() - call_start_time
+                call_duration = (time.time() - call_start_time) + 6 # Add 6 seconds to account for processing time after last media packet
                 
                 # Generate summary using LLM
                 summary = None
@@ -1527,6 +1883,41 @@ async def media_stream_handler(websocket: WebSocket):
                     summary = await generate_call_summary(conversation_history)
                     # Analyze lead status based on conversation
                     lead_status = await analyze_lead_status(conversation_history, summary)
+                
+                # Calculate call cost and deduct from wallet
+                wallet_db = get_wallet_db()
+                transaction_db = get_transaction_db()
+                
+                call_cost = await wallet_db.calculate_call_cost(call_duration)
+                user_id = call_record.get("user_id")
+                
+                if user_id and call_cost > 0:
+                    try:
+                        new_balance = await wallet_db.deduct_funds(
+                            user_id=user_id,
+                            amount=call_cost,
+                            transaction_id=call_sid
+                        )
+                        
+                        # Create debit transaction
+                        await transaction_db.create_transaction(
+                            user_id=user_id,
+                            transaction_type="debit",
+                            amount=call_cost,
+                            description=f"Call charges ({call_duration:.1f}s)",
+                            call_sid=call_sid,
+                            campaign_id=call_record.get("campaign_id"),
+                            metadata={
+                                "duration_seconds": call_duration,
+                                "lead_status": lead_status
+                            }
+                        )
+                        
+                        print(f"✓ Debited Rs. {call_cost:.2f} from wallet. New balance: Rs. {new_balance:.2f}")
+                    except ValueError as e:
+                        print(f"⚠️ Could not debit wallet: {e}")
+                    except Exception as e:
+                        print(f"✗ Error debiting wallet: {e}")
                 
                 # Update call record
                 await call_history_db.update_call(
@@ -1537,10 +1928,11 @@ async def media_stream_handler(websocket: WebSocket):
                         "status": "completed",
                         "transcript": conversation_history,
                         "summary": summary,
-                        "lead_status": lead_status
+                        "lead_status": lead_status,
+                        "call_cost": call_cost
                     }
                 )
-                print(f"✓ Call record saved (duration: {call_duration:.1f}s, lead: {lead_status})")
+                print(f"✓ Call record saved (duration: {call_duration:.1f}s, cost: Rs. {call_cost:.2f}, lead: {lead_status})")
                 
                 # Update campaign progress with lead status if this is a campaign call
                 if call_record.get("campaign_id") and lead_status:

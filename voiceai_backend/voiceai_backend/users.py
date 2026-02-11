@@ -54,6 +54,14 @@ class UserDB:
         result = await self.collection.insert_one(user)
         user["_id"] = str(result.inserted_id)
         
+        # Initialize wallet for new user
+        try:
+            from wallet import get_wallet_db
+            wallet_db = get_wallet_db()
+            await wallet_db.create_wallet(user["_id"], initial_balance=0.0)
+        except Exception as e:
+            print(f"Warning: Could not create wallet for user {user['_id']}: {e}")
+        
         # Remove password from returned object
         user.pop("password")
         

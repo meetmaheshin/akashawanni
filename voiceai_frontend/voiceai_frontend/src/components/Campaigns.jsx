@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   Megaphone, Upload, FileText, Loader2, CheckCircle, AlertCircle, 
-  Phone, Plus, RefreshCw, Trash2, Eye, Download 
+  Phone, Plus, RefreshCw, Trash2, Eye, Download, Wallet 
 } from 'lucide-react';
 
 const Campaigns = () => {
@@ -12,6 +12,7 @@ const Campaigns = () => {
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   // Create campaign form state
   const [campaignName, setCampaignName] = useState('');
@@ -33,6 +34,7 @@ const Campaigns = () => {
   useEffect(() => {
     // Initial fetch and start polling
     fetchCampaigns();
+    loadWalletBalance();
     startPolling();
     
     return () => {
@@ -40,6 +42,15 @@ const Campaigns = () => {
       stopPolling();
     };
   }, []);
+
+  const loadWalletBalance = async () => {
+    try {
+      const response = await axios.get('/api/wallet/balance');
+      setWalletBalance(response.data.balance);
+    } catch (error) {
+      console.error('Failed to load wallet balance:', error);
+    }
+  };
 
   const startPolling = () => {
     // Clear any existing interval first
@@ -291,6 +302,24 @@ const Campaigns = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Low Balance Warning */}
+      {walletBalance < 10 && (
+        <div className="glass-effect rounded-xl shadow-lg p-4 mb-6 bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <Wallet className="w-8 h-8 text-red-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-800">Low Wallet Balance</h3>
+              <p className="text-sm text-red-700">
+                Your current balance is ₹{walletBalance.toFixed(2)}. 
+                You need at least ₹10 to create campaigns. Please recharge your wallet.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">

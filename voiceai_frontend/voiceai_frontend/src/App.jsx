@@ -8,6 +8,7 @@ import Signup from './components/Signup';
 import CallInterface from './components/CallInterface';
 import CallHistory from './components/CallHistory';
 import Campaigns from './components/Campaigns';
+import WalletWidget from './components/WalletWidget';
 
 function App() {
   return (
@@ -110,6 +111,9 @@ function Navigation() {
               <History className="w-5 h-5" />
               <span>Call History</span>
             </Link>
+
+            {/* Wallet Widget */}
+            <WalletWidget />
 
             <div className="flex items-center space-x-3 pl-4 border-l border-gray-300">
               <div className="flex items-center space-x-2 text-gray-700">
