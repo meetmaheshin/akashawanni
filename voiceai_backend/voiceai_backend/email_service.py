@@ -1,4 +1,4 @@
-# Email Service for Akashvanni - Verification Emails
+# Email Service for Akashvanni
 import smtplib
 import random
 import string
@@ -9,8 +9,49 @@ import os
 
 SMTP_HOST = "smtp.hostinger.com"
 SMTP_PORT = 465
-SMTP_EMAIL = "admkn@akashvanni.com"
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", ">AvIvE=|VU1")
+SMTP_EMAIL = "admin@akashvanni.com"
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+
+# Branded email wrapper
+BRAND_COLOR = "#4f46e5"
+BRAND_COLOR_LIGHT = "#eef2ff"
+LOGO_URL = "https://akashvanni.com/logo.png"
+
+
+def _email_wrapper(body_html: str) -> str:
+    """Wrap email body in branded template"""
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0; padding:0; background-color:#f0f2f5; font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f2f5; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px; width:100%; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,{BRAND_COLOR} 0%,#7c3aed 100%); padding:32px 40px; text-align:center;">
+            <h1 style="margin:0; color:#ffffff; font-size:28px; font-weight:700; letter-spacing:-0.5px;">Akashvanni</h1>
+            <p style="margin:6px 0 0; color:rgba(255,255,255,0.85); font-size:13px; letter-spacing:0.5px;">AI Voice Platform</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 40px 32px;">
+            {body_html}
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 40px 28px; border-top:1px solid #e5e7eb; text-align:center;">
+            <p style="margin:0 0 8px; color:#9ca3af; font-size:12px;">Akashvanni &mdash; AI-Powered Voice Calling Platform</p>
+            <p style="margin:0; color:#d1d5db; font-size:11px;">TWOZERO &bull; Mayur Vihar Phase-3, East Delhi, 110096</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
 
 
 def generate_verification_code() -> str:
@@ -18,52 +59,112 @@ def generate_verification_code() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 
-def _send_email_sync(to_email: str, code: str, user_name: str):
-    """Actually send the email (runs in a background thread)"""
+def _send_email(to_email: str, subject: str, html: str):
+    """Send email via SMTP (runs in background thread)"""
+    if not SMTP_PASSWORD:
+        print(f"✗ SMTP_PASSWORD not set, skipping email to {to_email}")
+        return
+
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Akashvanni - Verify Your Email ({code})"
+        msg["Subject"] = subject
         msg["From"] = f"Akashvanni <{SMTP_EMAIL}>"
         msg["To"] = to_email
-
-        html = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px;">
-          <div style="max-width: 480px; margin: auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-            <div style="text-align: center; margin-bottom: 24px;">
-              <h1 style="color: #4f46e5; margin: 0;">Akashvanni</h1>
-              <p style="color: #6b7280; margin-top: 4px;">AI Voice Platform</p>
-            </div>
-            <p style="color: #374151; font-size: 16px;">Hi {user_name},</p>
-            <p style="color: #374151; font-size: 16px;">Your verification code is:</p>
-            <div style="text-align: center; margin: 24px 0;">
-              <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #4f46e5; background: #eef2ff; padding: 12px 24px; border-radius: 8px; display: inline-block;">{code}</span>
-            </div>
-            <p style="color: #6b7280; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-            <p style="color: #9ca3af; font-size: 12px; text-align: center;">Akashvanni &mdash; AI Voice Platform</p>
-          </div>
-        </body>
-        </html>
-        """
-
         msg.attach(MIMEText(html, "html"))
 
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
 
-        print(f"✓ Verification email sent to {to_email}")
-
+        print(f"✓ Email sent to {to_email}: {subject}")
     except Exception as e:
-        print(f"✗ Failed to send verification email to {to_email}: {e}")
+        print(f"✗ Failed to send email to {to_email}: {e}")
 
 
-def send_verification_email(to_email: str, code: str, user_name: str):
-    """Send verification email in a background thread (non-blocking)"""
+def _send_in_background(to_email: str, subject: str, html: str):
+    """Fire-and-forget email send"""
     thread = threading.Thread(
-        target=_send_email_sync,
-        args=(to_email, code, user_name),
+        target=_send_email,
+        args=(to_email, subject, html),
         daemon=True
     )
     thread.start()
+
+
+def send_verification_email(to_email: str, code: str, user_name: str):
+    """Send branded verification code email"""
+    body = f"""
+    <p style="margin:0 0 8px; color:#374151; font-size:17px; font-weight:600;">Hi {user_name},</p>
+    <p style="margin:0 0 24px; color:#6b7280; font-size:15px; line-height:1.6;">
+      Welcome! Please use the verification code below to confirm your email address and activate your account.
+    </p>
+    <div style="text-align:center; margin:28px 0;">
+      <div style="display:inline-block; background:{BRAND_COLOR_LIGHT}; border:2px dashed {BRAND_COLOR}; border-radius:12px; padding:18px 36px;">
+        <span style="font-size:40px; font-weight:800; letter-spacing:12px; color:{BRAND_COLOR}; font-family:'Courier New',monospace;">{code}</span>
+      </div>
+    </div>
+    <p style="margin:0 0 8px; color:#6b7280; font-size:14px; text-align:center;">
+      This code expires in <strong style="color:#374151;">10 minutes</strong>
+    </p>
+    <div style="margin:28px 0 0; padding:16px; background:#fef3c7; border-radius:8px; border-left:4px solid #f59e0b;">
+      <p style="margin:0; color:#92400e; font-size:13px;">
+        If you didn't create an account on Akashvanni, you can safely ignore this email.
+      </p>
+    </div>
+    """
+    html = _email_wrapper(body)
+    _send_in_background(to_email, f"Verify your email — {code}", html)
+
+
+def send_welcome_email(to_email: str, user_name: str):
+    """Send branded welcome email after verification"""
+    body = f"""
+    <div style="text-align:center; margin-bottom:24px;">
+      <div style="display:inline-block; background:{BRAND_COLOR_LIGHT}; border-radius:50%; padding:16px; margin-bottom:12px;">
+        <span style="font-size:36px;">&#127881;</span>
+      </div>
+      <h2 style="margin:0; color:#111827; font-size:22px; font-weight:700;">Welcome aboard, {user_name}!</h2>
+    </div>
+    <p style="margin:0 0 20px; color:#6b7280; font-size:15px; line-height:1.7; text-align:center;">
+      Your email has been verified and your Akashvanni account is now active. You're all set to start making AI-powered voice calls.
+    </p>
+    <div style="background:#f9fafb; border-radius:12px; padding:20px; margin:24px 0;">
+      <p style="margin:0 0 14px; color:#374151; font-size:14px; font-weight:600;">Here's what you can do:</p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:8px 0; color:#6b7280; font-size:14px;">
+            <span style="color:{BRAND_COLOR}; font-weight:bold; margin-right:8px;">&#9742;</span>
+            <strong style="color:#374151;">Make AI Calls</strong> &mdash; Call any number with your AI assistant
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; color:#6b7280; font-size:14px;">
+            <span style="color:{BRAND_COLOR}; font-weight:bold; margin-right:8px;">&#128227;</span>
+            <strong style="color:#374151;">Bulk Campaigns</strong> &mdash; Reach hundreds of leads at once
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; color:#6b7280; font-size:14px;">
+            <span style="color:{BRAND_COLOR}; font-weight:bold; margin-right:8px;">&#128202;</span>
+            <strong style="color:#374151;">Smart Analytics</strong> &mdash; Track hot/cold leads automatically
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; color:#6b7280; font-size:14px;">
+            <span style="color:{BRAND_COLOR}; font-weight:bold; margin-right:8px;">&#127759;</span>
+            <strong style="color:#374151;">Hindi &amp; English</strong> &mdash; Speak in the language your customers prefer
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div style="text-align:center; margin:28px 0 8px;">
+      <a href="https://akashvanni.com" style="display:inline-block; background:{BRAND_COLOR}; color:#ffffff; font-size:15px; font-weight:600; padding:14px 40px; border-radius:8px; text-decoration:none;">
+        Go to Dashboard
+      </a>
+    </div>
+    <p style="margin:20px 0 0; color:#9ca3af; font-size:13px; text-align:center;">
+      Need help? Just reply to this email &mdash; we're happy to assist.
+    </p>
+    """
+    html = _email_wrapper(body)
+    _send_in_background(to_email, "Welcome to Akashvanni! Your account is ready", html)

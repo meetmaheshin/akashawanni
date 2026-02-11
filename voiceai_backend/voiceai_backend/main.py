@@ -454,6 +454,10 @@ async def verify_email(request: dict = Body(...)):
         if not user:
             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
 
+        # Send welcome email
+        from email_service import send_welcome_email
+        send_welcome_email(email, user.get("name", "User"))
+
         # Create access token
         access_token = create_access_token(data={"sub": user["_id"]})
 
