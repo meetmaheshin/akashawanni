@@ -171,7 +171,12 @@ async def connect_to_mongodb():
     global mongodb_client, mongodb_database
     
     try:
-        mongodb_client = AsyncIOMotorClient(MONGODB_URL)
+        mongodb_client = AsyncIOMotorClient(
+            MONGODB_URL,
+            serverSelectionTimeoutMS=60000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+        )
         mongodb_database = mongodb_client[DATABASE_NAME]
         
         # Create indexes for call_history collection
