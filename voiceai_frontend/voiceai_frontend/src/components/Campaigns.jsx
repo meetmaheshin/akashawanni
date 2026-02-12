@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   Megaphone, Upload, FileText, Loader2, CheckCircle, AlertCircle, 
-  Phone, Plus, RefreshCw, Trash2, Eye, Download, Wallet 
+  Phone, Plus, RefreshCw, Trash2, Eye, Download, Wallet, Calendar, Clock 
 } from 'lucide-react';
 
 // Voice options per TTS engine (same as CallInterface)
@@ -56,6 +56,11 @@ const Campaigns = () => {
   const [ttsEngine, setTtsEngine] = useState('cartesia');
   const [ttsVoice, setTtsVoice] = useState('');
   const [uploadingKb, setUploadingKb] = useState(false);
+  
+  // Scheduling state
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
   
   const fileInputRef = useRef(null);
   const kbFileInputRef = useRef(null);
@@ -203,6 +208,27 @@ const Campaigns = () => {
     setSuccess(null);
 
     try {
+      // Validate scheduling
+      let scheduledDateTime = null;
+      if (isScheduled) {
+        if (!scheduledDate || !scheduledTime) {
+          setError('Please select both date and time for scheduled campaign');
+          return;
+        }
+        
+        // Combine date and time into ISO string
+        scheduledDateTime = `${scheduledDate}T${scheduledTime}:00`;
+        
+        // Validate future time
+        const scheduledTimestamp = new Date(scheduledDateTime).getTime();
+        const now = new Date().getTime();
+        
+        if (scheduledTimestamp <= now) {
+          setError('Scheduled time must be in the future');
+          return;
+        }
+      }
+      
       let response;
 
       if (inputMethod === 'file' && uploadedFile) {
@@ -218,6 +244,10 @@ const Campaigns = () => {
         formData.append('tts_voice', ttsVoice);
         formData.append('chunk_size', chunkSize);
         formData.append('retry_failed', 'true');
+        formData.append('is_scheduled', isScheduled.toString());
+        if (scheduledDateTime) {
+          formData.append('scheduled_time', scheduledDateTime);
+        }
 
         response = await axios.post('/api/campaigns/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
@@ -229,20 +259,25 @@ const Campaigns = () => {
           return;
         }
 
-        response = await axios.post('/api/campaigns', null, {
-          params: {
-            name: campaignName,
-            phone_numbers: phoneNumbers,
-            kb_id: kbId,
-            kb_name: kbName || kbId,
-            welcome_message: welcomeMessage,
-            language: language,
-            tts_engine: ttsEngine,
-            tts_voice: ttsVoice,
-            chunk_size: chunkSize,
-            retry_failed: true
-          }
-        });
+        const params = {
+          name: campaignName,
+          phone_numbers: phoneNumbers,
+          kb_id: kbId,
+          kb_name: kbName || kbId,
+          welcome_message: welcomeMessage,
+          language: language,
+          tts_engine: ttsEngine,
+          tts_voice: ttsVoice,
+          chunk_size: chunkSize,
+          retry_failed: true,
+          is_scheduled: isScheduled
+        };
+        
+        if (scheduledDateTime) {
+          params.scheduled_time = scheduledDateTime;
+        }
+
+        response = await axios.post('/api/campaigns', null, { params });
       }
 
       setSuccess(`Campaign "${response.data.campaign_name || campaignName}" created successfully!`);
@@ -258,6 +293,9 @@ const Campaigns = () => {
       setLanguage('en');
       setTtsEngine('cartesia');
       setTtsVoice('');
+      setIsScheduled(false);
+      setScheduledDate('');
+      setScheduledTime('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -323,6 +361,8 @@ const Campaigns = () => {
         return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'scheduled':
+        return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'failed':
         return 'bg-red-100 text-red-800 border-red-300';
       default:
@@ -414,6 +454,12 @@ const Campaigns = () => {
                   <p className="text-sm text-gray-600">
                     KB: {campaign.knowledge_base_name} • Language: {campaign.language === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}
                   </p>
+                  {campaign.status === 'scheduled' && campaign.scheduled_time && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-purple-700 bg-purple-50 px-3 py-1 rounded-lg inline-flex">
+                      <Calendar className="w-4 h-4" />
+                      <span>Scheduled: {new Date(campaign.scheduled_time).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(campaign.status)}`}>
                   {campaign.status.toUpperCase()}
@@ -757,6 +803,75 @@ const Campaigns = () => {
                   className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
                 />
               </div>
+
+              {/* Scheduling Options */}
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Campaign Execution
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsScheduled(false)}
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all flex items-center justify-center gap-2 ${
+                      !isScheduled
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Phone className="w-5 h-5" />
+                    Run Immediately
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsScheduled(true)}
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all flex items-center justify-center gap-2 ${
+                      isScheduled
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Calendar className="w-5 h-5" />
+                    Schedule for Later
+                  </button>
+                </div>
+              </div>
+
+              {/* Schedule DateTime (shown only when scheduled) */}
+              {isScheduled && (
+                <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock className="w-5 h-5 text-purple-600" />
+                    <label className="text-sm font-semibold text-purple-900">
+                      Select Date and Time
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Date</label>
+                      <input
+                        type="date"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Time</label>
+                      <input
+                        type="time"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-purple-700">
+                    Campaign will start automatically at the scheduled time
+                  </p>
+                </div>
+              )}
 
               {/* Chunk Size */}
               {/* <div className="mb-6">

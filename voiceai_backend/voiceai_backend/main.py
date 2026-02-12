@@ -34,6 +34,7 @@ from auth import create_access_token, get_current_active_user, get_admin_user, i
 from wallet import get_wallet_db, initialize_wallet_db
 from transactions import get_transaction_db, initialize_transaction_db
 from payments import PaymentService
+from scheduler import initialize_scheduler, get_scheduler
 from typing import Optional
 import shutil
 import aiofiles
@@ -248,11 +249,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Warning: Could not pre-load KB: {e}")
     
+    # Initialize campaign scheduler
+    initialize_scheduler(process_campaign)
+    print("✓ Campaign scheduler initialized")
+    
     print("✓ All connections ready (per-call Deepgram + Cartesia)")
     
     yield
     
-    # Shutdown - close MongoDB connection
+    # Shutdown
+    scheduler = get_scheduler()
+    scheduler.stop()
+    print("✓ Campaign scheduler stopped")
+    
+    # Close MongoDB connection
     await close_mongodb_connection()
 
 
@@ -1246,6 +1256,8 @@ async def create_campaign(
     tts_voice: str = "",
     chunk_size: int = 10,
     retry_failed: bool = True,
+    is_scheduled: bool = False,
+    scheduled_time: Optional[str] = None,  # ISO format datetime string
     current_user: dict = Depends(get_current_active_user)
 ):
     """Create a new calling campaign"""
@@ -1277,6 +1289,25 @@ async def create_campaign(
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_id}' not found")
         
+        # Parse scheduled time if provided
+        scheduled_datetime = None
+        if is_scheduled and scheduled_time:
+            try:
+                # Parse ISO format datetime string
+                scheduled_datetime = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                
+                # Validate scheduled time is in the future
+                if scheduled_datetime <= datetime.utcnow():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Scheduled time must be in the future"
+                    )
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid datetime format. Use ISO format (e.g., 2024-12-31T10:30:00): {str(e)}"
+                )
+        
         # Create campaign in database
         campaign_db = get_campaign_db()
         campaign = await campaign_db.create_campaign(
@@ -1290,17 +1321,25 @@ async def create_campaign(
             retry_failed=retry_failed,
             user_id=current_user["_id"],
             tts_engine=tts_engine,
-            tts_voice=tts_voice
+            tts_voice=tts_voice,
+            is_scheduled=is_scheduled,
+            scheduled_time=scheduled_datetime
         )
-
-        # Start processing campaign in background
-        asyncio.create_task(process_campaign(campaign["_id"]))
-
+        
+        # Start processing campaign immediately if not scheduled
+        if not is_scheduled:
+            asyncio.create_task(process_campaign(campaign["_id"]))
+            message = f"Campaign '{name}' created and processing started"
+        else:
+            message = f"Campaign '{name}' scheduled for {scheduled_datetime.isoformat()}"
+        
         return JSONResponse({
             "status": "success",
             "campaign_id": campaign["_id"],
             "total_numbers": len(numbers_list),
-            "message": f"Campaign '{name}' created and processing started"
+            "is_scheduled": is_scheduled,
+            "scheduled_time": scheduled_datetime.isoformat() if scheduled_datetime else None,
+            "message": message
         })
     
     except HTTPException:
@@ -1321,6 +1360,8 @@ async def create_campaign_with_file(
     tts_voice: str = "",
     chunk_size: int = 10,
     retry_failed: bool = True,
+    is_scheduled: bool = False,
+    scheduled_time: Optional[str] = None,
     current_user: dict = Depends(get_current_active_user)
 ):
     """Create a campaign by uploading a file with phone numbers"""
@@ -1368,6 +1409,22 @@ async def create_campaign_with_file(
         # Use filename as campaign name if not provided
         campaign_name = name or f"Campaign_{file.filename.replace('.txt', '').replace('.csv', '')}"
         
+        # Parse scheduled time if provided
+        scheduled_datetime = None
+        if is_scheduled and scheduled_time:
+            try:
+                scheduled_datetime = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                if scheduled_datetime <= datetime.utcnow():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Scheduled time must be in the future"
+                    )
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid datetime format. Use ISO format: {str(e)}"
+                )
+        
         # Create campaign in database
         campaign_db = get_campaign_db()
         campaign = await campaign_db.create_campaign(
@@ -1381,18 +1438,26 @@ async def create_campaign_with_file(
             retry_failed=retry_failed,
             user_id=current_user["_id"],
             tts_engine=tts_engine,
-            tts_voice=tts_voice
+            tts_voice=tts_voice,
+            is_scheduled=is_scheduled,
+            scheduled_time=scheduled_datetime
         )
-
-        # Start processing campaign in background
-        asyncio.create_task(process_campaign(campaign["_id"]))
-
+        
+        # Start processing campaign immediately if not scheduled
+        if not is_scheduled:
+            asyncio.create_task(process_campaign(campaign["_id"]))
+            message = f"Campaign '{campaign_name}' created with {len(numbers_list)} numbers and processing started"
+        else:
+            message = f"Campaign '{campaign_name}' scheduled for {scheduled_datetime.isoformat()} with {len(numbers_list)} numbers"
+        
         return JSONResponse({
             "status": "success",
             "campaign_id": campaign["_id"],
             "campaign_name": campaign_name,
             "total_numbers": len(numbers_list),
-            "message": f"Campaign '{campaign_name}' created with {len(numbers_list)} numbers"
+            "is_scheduled": is_scheduled,
+            "scheduled_time": scheduled_datetime.isoformat() if scheduled_datetime else None,
+            "message": message
         })
     
     except HTTPException:

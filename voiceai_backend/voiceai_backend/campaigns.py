@@ -24,9 +24,17 @@ class CampaignDB:
         retry_failed: bool = True,
         user_id: str = None,
         tts_engine: str = "cartesia",
-        tts_voice: str = ""
+        tts_voice: str = "",
+        is_scheduled: bool = False,
+        scheduled_time: Optional[datetime] = None
     ) -> Dict:
         """Create a new calling campaign"""
+        
+        # Determine initial status based on scheduling
+        if is_scheduled and scheduled_time:
+            initial_status = "scheduled"
+        else:
+            initial_status = "pending"
         
         campaign = {
             "name": name,
@@ -41,7 +49,9 @@ class CampaignDB:
             "user_id": user_id,
             "tts_engine": tts_engine,
             "tts_voice": tts_voice,
-            "status": "pending",  # pending, processing, completed, failed, paused
+            "is_scheduled": is_scheduled,
+            "scheduled_time": scheduled_time,
+            "status": initial_status,  # scheduled, pending, processing, completed, failed, paused
             "progress": {
                 "total": len(phone_numbers),
                 "completed": 0,
@@ -76,6 +86,8 @@ class CampaignDB:
                     campaign["started_at"] = campaign["started_at"].isoformat()
                 if campaign.get("completed_at"):
                     campaign["completed_at"] = campaign["completed_at"].isoformat()
+                if campaign.get("scheduled_time"):
+                    campaign["scheduled_time"] = campaign["scheduled_time"].isoformat()
                 # Convert timestamps in call_results
                 for result in campaign.get("call_results", []):
                     if result.get("timestamp"):
@@ -102,6 +114,8 @@ class CampaignDB:
                 campaign["started_at"] = campaign["started_at"].isoformat()
             if campaign.get("completed_at"):
                 campaign["completed_at"] = campaign["completed_at"].isoformat()
+            if campaign.get("scheduled_time"):
+                campaign["scheduled_time"] = campaign["scheduled_time"].isoformat()
             # Convert timestamps in call_results
             for result in campaign.get("call_results", []):
                 if result.get("timestamp"):
@@ -204,6 +218,34 @@ class CampaignDB:
             return result.deleted_count > 0
         except:
             return False
+    
+    async def get_scheduled_campaigns_to_run(self) -> List[Dict]:
+        """Get scheduled campaigns that are ready to run (scheduled_time <= now)"""
+        try:
+            current_time = datetime.utcnow()
+            cursor = self.campaigns.find({
+                "status": "scheduled",
+                "is_scheduled": True,
+                "scheduled_time": {"$lte": current_time}
+            })
+            campaigns = await cursor.to_list(length=100)
+            
+            for campaign in campaigns:
+                campaign["_id"] = str(campaign["_id"])
+                # Convert datetime objects to ISO format strings
+                if campaign.get("created_at"):
+                    campaign["created_at"] = campaign["created_at"].isoformat()
+                if campaign.get("started_at"):
+                    campaign["started_at"] = campaign["started_at"].isoformat()
+                if campaign.get("completed_at"):
+                    campaign["completed_at"] = campaign["completed_at"].isoformat()
+                if campaign.get("scheduled_time"):
+                    campaign["scheduled_time"] = campaign["scheduled_time"].isoformat()
+            
+            return campaigns
+        except Exception as e:
+            print(f"Error getting scheduled campaigns: {e}")
+            return []
 
 
 # Global campaign DB instance
