@@ -2472,36 +2472,58 @@ async def health_check():
 
 @app.get("/api/debug/test-email")
 async def debug_test_email(to: str = None):
-    """Test Resend email delivery — returns detailed diagnostics"""
-    import resend as resend_mod
+    """Test SMTP email delivery — returns detailed diagnostics"""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
 
-    api_key = os.getenv("RESEND_API_KEY")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.hostinger.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER", "admin@akashvanni.com")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+
     results = {
-        "provider": "resend",
-        "from_email": "admin@akashvanni.com",
-        "resend_api_key_set": bool(api_key),
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "smtp_user": smtp_user,
+        "smtp_password_set": bool(smtp_password),
+        "smtp_password_length": len(smtp_password) if smtp_password else 0,
         "steps": []
     }
 
-    if not api_key:
-        results["steps"].append({"step": "check_api_key", "status": "FAIL", "error": "RESEND_API_KEY env var is not set"})
+    if not smtp_password:
+        results["steps"].append({"step": "check_password", "status": "FAIL", "error": "SMTP_PASSWORD env var is not set"})
+        return results
+    results["steps"].append({"step": "check_password", "status": "OK"})
+
+    try:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+        results["steps"].append({"step": "connect", "status": "OK"})
+    except Exception as e:
+        results["steps"].append({"step": "connect", "status": "FAIL", "error": str(e)})
         return results
 
-    results["steps"].append({"step": "check_api_key", "status": "OK"})
-
-    to_email = to or "admin@akashvanni.com"
     try:
-        resend_mod.api_key = api_key
-        resp = resend_mod.Emails.send({
-            "from": "Akashvanni <admin@akashvanni.com>",
-            "to": [to_email],
-            "subject": "Akashvanni Email Test — Working!",
-            "html": "<h2>Email is working!</h2><p>Test email from Railway via Resend.</p>"
-        })
-        results["steps"].append({"step": "send", "status": "OK", "sent_to": to_email, "resend_id": str(resp)})
+        server.login(smtp_user, smtp_password)
+        results["steps"].append({"step": "login", "status": "OK"})
+    except Exception as e:
+        results["steps"].append({"step": "login", "status": "FAIL", "error": str(e)})
+        server.quit()
+        return results
+
+    to_email = to or smtp_user
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Akashvanni SMTP Test — Working!"
+        msg["From"] = f"Akashvanni <{smtp_user}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText("<h2>SMTP Working!</h2><p>Test email from Railway.</p>", "html"))
+        server.sendmail(smtp_user, to_email, msg.as_string())
+        results["steps"].append({"step": "send", "status": "OK", "sent_to": to_email})
     except Exception as e:
         results["steps"].append({"step": "send", "status": "FAIL", "error": str(e)})
 
+    server.quit()
     return results
 
 
