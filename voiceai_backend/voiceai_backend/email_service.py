@@ -1,13 +1,21 @@
 # Email Service for Akashvanni
+# Uses Resend HTTP API (HTTPS port 443 — works on Railway)
+# Fallback: SMTP if Resend key not set (works locally)
 import os
+import json
 import smtplib
 import random
 import string
 import threading
+import urllib.request
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# Config from environment (same pattern as invoaice app)
+# Resend config
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM = os.getenv("RESEND_FROM", "Akashvanni <admin@akashvanni.com>")
+
+# SMTP fallback config (for local dev)
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.hostinger.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "admin@akashvanni.com")
@@ -17,7 +25,6 @@ SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Akashvanni")
 # Branded email wrapper
 BRAND_COLOR = "#4f46e5"
 BRAND_COLOR_LIGHT = "#eef2ff"
-LOGO_URL = "https://akashvanni.com/logo.png"
 
 
 def _email_wrapper(body_html: str) -> str:
@@ -61,25 +68,56 @@ def generate_verification_code() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 
+def _send_via_resend(to_email: str, subject: str, html: str):
+    """Send email via Resend HTTP API (uses HTTPS, no SMTP ports needed)."""
+    payload = json.dumps({
+        "from": RESEND_FROM,
+        "to": [to_email],
+        "subject": subject,
+        "html": html
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    resp = urllib.request.urlopen(req, timeout=15)
+    result = json.loads(resp.read().decode("utf-8"))
+    print(f"✓ Email sent via Resend to {to_email}: {subject} (id={result.get('id', '?')})")
+    return result
+
+
+def _send_via_smtp(to_email: str, subject: str, html: str):
+    """Send email via SMTP (for local development)."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_USER, to_email, msg.as_string())
+
+    print(f"✓ Email sent via SMTP to {to_email}: {subject}")
+
+
 def _send_email(to_email: str, subject: str, html: str):
-    """Send email via Hostinger SMTP (STARTTLS on port 587)."""
-    if not SMTP_PASSWORD:
-        print("SMTP_PASSWORD not set. Email not sent.")
-        return
-
+    """Send email — Resend API preferred, SMTP fallback for local dev."""
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, to_email, msg.as_string())
-
-        print(f"✓ Email sent to {to_email}: {subject}")
+        if RESEND_API_KEY:
+            _send_via_resend(to_email, subject, html)
+        elif SMTP_PASSWORD:
+            _send_via_smtp(to_email, subject, html)
+        else:
+            print("Neither RESEND_API_KEY nor SMTP_PASSWORD set. Email not sent.")
     except Exception as e:
         print(f"✗ Failed to send email to {to_email}: {e}")
 

@@ -2472,67 +2472,54 @@ async def health_check():
 
 @app.get("/api/debug/test-email")
 async def debug_test_email(to: str = None):
-    """Test SMTP email delivery — same pattern as invoaice app"""
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
+    """Test email delivery via Resend HTTP API"""
+    import json
+    import urllib.request
 
-    smtp_host = os.getenv("SMTP_HOST", "smtp.hostinger.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "admin@akashvanni.com")
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    smtp_from_name = os.getenv("SMTP_FROM_NAME", "Akashvanni")
+    resend_key = os.getenv("RESEND_API_KEY", "")
+    resend_from = os.getenv("RESEND_FROM", "Akashvanni <admin@akashvanni.com>")
+    to_email = to or "admin@akashvanni.com"
 
     results = {
-        "smtp_host": smtp_host,
-        "smtp_port": smtp_port,
-        "smtp_user": smtp_user,
-        "smtp_password_set": bool(smtp_password),
-        "smtp_password_length": len(smtp_password) if smtp_password else 0,
+        "method": "resend_http_api",
+        "resend_key_set": bool(resend_key),
+        "resend_key_prefix": resend_key[:8] + "..." if len(resend_key) > 8 else "",
+        "from": resend_from,
+        "to": to_email,
         "steps": []
     }
 
-    if not smtp_password:
-        results["steps"].append({"step": "check_password", "status": "FAIL", "error": "SMTP_PASSWORD env var is not set"})
+    if not resend_key:
+        results["steps"].append({"step": "check_key", "status": "FAIL", "error": "RESEND_API_KEY env var is not set"})
         return results
-    results["steps"].append({"step": "check_password", "status": "OK"})
+    results["steps"].append({"step": "check_key", "status": "OK"})
 
     try:
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        results["steps"].append({"step": "connect", "status": "OK"})
-    except Exception as e:
-        results["steps"].append({"step": "connect", "status": "FAIL", "error": str(e)})
-        return results
+        payload = json.dumps({
+            "from": resend_from,
+            "to": [to_email],
+            "subject": "Akashvanni Test — Email Working!",
+            "html": "<h2>Email Working!</h2><p>Test email sent via Resend from Railway.</p>"
+        }).encode("utf-8")
 
-    try:
-        server.starttls()
-        results["steps"].append({"step": "starttls", "status": "OK"})
-    except Exception as e:
-        results["steps"].append({"step": "starttls", "status": "FAIL", "error": str(e)})
-        server.quit()
-        return results
-
-    try:
-        server.login(smtp_user, smtp_password)
-        results["steps"].append({"step": "login", "status": "OK"})
-    except Exception as e:
-        results["steps"].append({"step": "login", "status": "FAIL", "error": str(e)})
-        server.quit()
-        return results
-
-    to_email = to or smtp_user
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Akashvanni SMTP Test — Working!"
-        msg["From"] = f"{smtp_from_name} <{smtp_user}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText("<h2>SMTP Working!</h2><p>Test email from Railway.</p>", "html"))
-        server.sendmail(smtp_user, to_email, msg.as_string())
-        results["steps"].append({"step": "send", "status": "OK", "sent_to": to_email})
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        resp = urllib.request.urlopen(req, timeout=15)
+        body = json.loads(resp.read().decode("utf-8"))
+        results["steps"].append({"step": "send", "status": "OK", "resend_id": body.get("id", "?")})
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else ""
+        results["steps"].append({"step": "send", "status": "FAIL", "error": f"HTTP {e.code}: {error_body}"})
     except Exception as e:
         results["steps"].append({"step": "send", "status": "FAIL", "error": str(e)})
 
-    server.quit()
     return results
 
 
