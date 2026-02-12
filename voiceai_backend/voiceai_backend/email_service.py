@@ -1,11 +1,18 @@
-# Email Service for Akashvanni — uses Resend HTTP API (Railway blocks SMTP)
+# Email Service for Akashvanni
+import os
+import smtplib
 import random
 import string
 import threading
-import os
-import json
-import urllib.request
-import urllib.error
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# Config from environment (same pattern as invoaice app)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.hostinger.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER", "admin@akashvanni.com")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Akashvanni")
 
 # Branded email wrapper
 BRAND_COLOR = "#4f46e5"
@@ -55,35 +62,23 @@ def generate_verification_code() -> str:
 
 
 def _send_email(to_email: str, subject: str, html: str):
-    """Send email via Resend HTTP API (runs in background thread)"""
-    api_key = os.getenv("RESEND_API_KEY")
-    if not api_key:
-        print(f"✗ RESEND_API_KEY not set, skipping email to {to_email}")
+    """Send email via Hostinger SMTP (SSL on port 465)."""
+    if not SMTP_PASSWORD:
+        print("SMTP_PASSWORD not set. Email not sent.")
         return
 
     try:
-        payload = json.dumps({
-            "from": "Akashvanni <admin@akashvanni.com>",
-            "to": [to_email],
-            "subject": subject,
-            "html": html
-        }).encode("utf-8")
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(html, "html"))
 
-        req = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-            print(f"✓ Email sent to {to_email}: {subject} (id={result.get('id')})")
-    except urllib.error.HTTPError as e:
-        body = e.read().decode() if e.fp else ""
-        print(f"✗ Failed to send email to {to_email}: HTTP {e.code} — {body}")
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+
+        print(f"✓ Email sent to {to_email}: {subject}")
     except Exception as e:
         print(f"✗ Failed to send email to {to_email}: {e}")
 
