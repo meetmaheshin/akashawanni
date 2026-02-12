@@ -2478,7 +2478,7 @@ async def debug_test_email(to: str = None):
     from email.mime.multipart import MIMEMultipart
 
     smtp_host = os.getenv("SMTP_HOST", "smtp.hostinger.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER", "admin@akashvanni.com")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     smtp_from_name = os.getenv("SMTP_FROM_NAME", "Akashvanni")
@@ -2498,10 +2498,18 @@ async def debug_test_email(to: str = None):
     results["steps"].append({"step": "check_password", "status": "OK"})
 
     try:
-        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        server = smtplib.SMTP(smtp_host, smtp_port)
         results["steps"].append({"step": "connect", "status": "OK"})
     except Exception as e:
         results["steps"].append({"step": "connect", "status": "FAIL", "error": str(e)})
+        return results
+
+    try:
+        server.starttls()
+        results["steps"].append({"step": "starttls", "status": "OK"})
+    except Exception as e:
+        results["steps"].append({"step": "starttls", "status": "FAIL", "error": str(e)})
+        server.quit()
         return results
 
     try:

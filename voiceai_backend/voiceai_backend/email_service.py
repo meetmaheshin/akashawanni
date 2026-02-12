@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 
 # Config from environment (same pattern as invoaice app)
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.hostinger.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "admin@akashvanni.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Akashvanni")
@@ -62,7 +62,7 @@ def generate_verification_code() -> str:
 
 
 def _send_email(to_email: str, subject: str, html: str):
-    """Send email via Hostinger SMTP (SSL on port 465)."""
+    """Send email via Hostinger SMTP (STARTTLS on port 587)."""
     if not SMTP_PASSWORD:
         print("SMTP_PASSWORD not set. Email not sent.")
         return
@@ -74,7 +74,8 @@ def _send_email(to_email: str, subject: str, html: str):
         msg["To"] = to_email
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_USER, to_email, msg.as_string())
 
