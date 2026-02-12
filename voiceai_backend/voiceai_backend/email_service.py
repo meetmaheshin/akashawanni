@@ -1,11 +1,11 @@
-# Email Service for Akashvanni
-import smtplib
+# Email Service for Akashvanni — uses Resend HTTP API (Railway blocks SMTP)
 import random
 import string
 import threading
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import json
+import urllib.request
+import urllib.error
 
 # Branded email wrapper
 BRAND_COLOR = "#4f46e5"
@@ -55,29 +55,35 @@ def generate_verification_code() -> str:
 
 
 def _send_email(to_email: str, subject: str, html: str):
-    """Send email via SMTP (runs in background thread)"""
-    smtp_host = os.getenv("SMTP_HOST", "smtp.hostinger.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "465"))
-    smtp_user = os.getenv("SMTP_USER", "admin@akashvanni.com")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM_NAME", "Akashvanni")
-
-    if not smtp_password:
-        print(f"✗ SMTP_PASSWORD not set, skipping email to {to_email}")
+    """Send email via Resend HTTP API (runs in background thread)"""
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        print(f"✗ RESEND_API_KEY not set, skipping email to {to_email}")
         return
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{smtp_from} <{smtp_user}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html, "html"))
+        payload = json.dumps({
+            "from": "Akashvanni <admin@akashvanni.com>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html
+        }).encode("utf-8")
 
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15) as server:
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, to_email, msg.as_string())
-
-        print(f"✓ Email sent to {to_email}: {subject}")
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+            print(f"✓ Email sent to {to_email}: {subject} (id={result.get('id')})")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if e.fp else ""
+        print(f"✗ Failed to send email to {to_email}: HTTP {e.code} — {body}")
     except Exception as e:
         print(f"✗ Failed to send email to {to_email}: {e}")
 
