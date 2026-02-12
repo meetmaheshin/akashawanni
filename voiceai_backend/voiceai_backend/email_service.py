@@ -53,7 +53,7 @@ def _email_wrapper(body_html: str) -> str:
         <tr>
           <td style="padding:20px 40px 28px; border-top:1px solid #e5e7eb; text-align:center;">
             <p style="margin:0 0 8px; color:#9ca3af; font-size:12px;">Akashvanni &mdash; AI-Powered Voice Calling Platform</p>
-            <p style="margin:0; color:#d1d5db; font-size:11px;">TWOZERO &bull; Mayur Vihar Phase-3, East Delhi, 110096</p>
+            <p style="margin:0; color:#d1d5db; font-size:11px;">TWOZERO</p>
           </td>
         </tr>
       </table>
