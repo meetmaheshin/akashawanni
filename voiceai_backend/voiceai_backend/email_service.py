@@ -1,20 +1,11 @@
-# Email Service for Akashvanni
-import smtplib
+# Email Service for Akashvanni — uses Resend HTTP API (Railway blocks SMTP ports)
 import random
 import string
 import threading
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import resend
 
-SMTP_HOST = "smtp.hostinger.com"
-SMTP_PORT = 465
-SMTP_EMAIL = "admin@akashvanni.com"
-
-
-def _get_smtp_password():
-    """Get SMTP password at runtime (not module load time)"""
-    return os.getenv("SMTP_PASSWORD")
+FROM_EMAIL = "Akashvanni <admin@akashvanni.com>"
 
 # Branded email wrapper
 BRAND_COLOR = "#4f46e5"
@@ -64,23 +55,20 @@ def generate_verification_code() -> str:
 
 
 def _send_email(to_email: str, subject: str, html: str):
-    """Send email via SMTP (runs in background thread)"""
-    smtp_password = _get_smtp_password()
-    if not smtp_password:
-        print(f"✗ SMTP_PASSWORD not set, skipping email to {to_email}")
+    """Send email via Resend HTTP API (runs in background thread)"""
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        print(f"✗ RESEND_API_KEY not set, skipping email to {to_email}")
         return
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"Akashvanni <{SMTP_EMAIL}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.login(SMTP_EMAIL, smtp_password)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-
+        resend.api_key = api_key
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html
+        })
         print(f"✓ Email sent to {to_email}: {subject}")
     except Exception as e:
         print(f"✗ Failed to send email to {to_email}: {e}")
