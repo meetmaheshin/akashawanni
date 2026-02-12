@@ -2508,6 +2508,7 @@ async def debug_test_email(to: str = None):
             headers={
                 "Authorization": f"Bearer {resend_key}",
                 "Content-Type": "application/json",
+                "User-Agent": "Akashvanni/1.0",
             },
             method="POST",
         )
