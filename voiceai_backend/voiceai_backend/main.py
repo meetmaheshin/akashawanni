@@ -625,16 +625,321 @@ async def update_profile(request: dict = Body(...), current_user: dict = Depends
 async def get_all_users(
     current_user: dict = Depends(get_admin_user),
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
 ):
-    """Get all users (admin only)"""
+    """Get all users (admin only) with optional date filtering"""
     try:
         user_db = get_user_db()
-        users = await user_db.get_all_users(limit=limit, skip=offset)
-        total = await user_db.get_total_users_count()
+        
+        # Build filter query
+        filter_query = {}
+        if date_from or date_to:
+            filter_query["created_at"] = {}
+            if date_from:
+                filter_query["created_at"]["$gte"] = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            if date_to:
+                # Add one day to include the entire end date
+                end_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                from datetime import timedelta
+                filter_query["created_at"]["$lt"] = end_date + timedelta(days=1)
+        
+        # Get users with filter
+        if filter_query:
+            cursor = user_db.collection.find(filter_query, {"password": 0}).skip(offset).limit(limit).sort("created_at", -1)
+            users = await cursor.to_list(length=limit)
+            total = await user_db.collection.count_documents(filter_query)
+        else:
+            users = await user_db.get_all_users(limit=limit, skip=offset)
+            total = await user_db.get_total_users_count()
+        
+        # Convert datetime objects to strings
+        for user in users:
+            user["_id"] = str(user["_id"])
+            if user.get("created_at"):
+                if isinstance(user["created_at"], datetime):
+                    user["created_at"] = user["created_at"].isoformat()
+            if user.get("updated_at"):
+                if isinstance(user["updated_at"], datetime):
+                    user["updated_at"] = user["updated_at"].isoformat()
+            if user.get("verification_code_expiry"):
+                if isinstance(user["verification_code_expiry"], datetime):
+                    user["verification_code_expiry"] = user["verification_code_expiry"].isoformat()
         
         return JSONResponse({
             "users": users,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/users/{user_id}")
+async def get_user_by_id_admin(
+    user_id: str,
+    current_user: dict = Depends(get_admin_user)
+):
+    """Get specific user details (admin only)"""
+    try:
+        user_db = get_user_db()
+        user = await user_db.get_user_by_id(user_id)
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Convert datetime objects to strings
+        if user.get("created_at"):
+            if isinstance(user["created_at"], datetime):
+                user["created_at"] = user["created_at"].isoformat()
+        if user.get("updated_at"):
+            if isinstance(user["updated_at"], datetime):
+                user["updated_at"] = user["updated_at"].isoformat()
+        if user.get("verification_code_expiry"):
+            if isinstance(user["verification_code_expiry"], datetime):
+                user["verification_code_expiry"] = user["verification_code_expiry"].isoformat()
+        
+        return JSONResponse(user)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/users/{user_id}")
+async def update_user_admin(
+    user_id: str,
+    update_data: dict = Body(...),
+    current_user: dict = Depends(get_admin_user)
+):
+    """Update user information (admin only)"""
+    try:
+        user_db = get_user_db()
+        
+        # Check if user exists
+        user = await user_db.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update user
+        success = await user_db.update_user(user_id, update_data)
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to update user")
+        
+        # Get updated user
+        updated_user = await user_db.get_user_by_id(user_id)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "User updated successfully",
+            "user": updated_user
+        })
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/campaigns")
+async def get_all_campaigns_admin(
+    current_user: dict = Depends(get_admin_user),
+    limit: int = 100,
+    offset: int = 0,
+    user_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """Get all campaigns from all users with filtering (admin only)"""
+    try:
+        campaign_db = get_campaign_db()
+        
+        # Build filter query
+        filter_query = {}
+        if user_id:
+            filter_query["user_id"] = user_id
+        if status:
+            filter_query["status"] = status
+        if date_from or date_to:
+            filter_query["created_at"] = {}
+            if date_from:
+                filter_query["created_at"]["$gte"] = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            if date_to:
+                from datetime import timedelta
+                end_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                filter_query["created_at"]["$lt"] = end_date + timedelta(days=1)
+        
+        # Get campaigns with filter
+        campaigns = await campaign_db.campaigns.find(
+            filter_query
+        ).sort("created_at", -1).skip(offset).limit(limit).to_list(length=limit)
+        
+        # Convert ObjectId to string and datetime objects
+        for campaign in campaigns:
+            campaign["_id"] = str(campaign["_id"])
+            if campaign.get("created_at") and isinstance(campaign["created_at"], datetime):
+                campaign["created_at"] = campaign["created_at"].isoformat()
+            if campaign.get("scheduled_for") and isinstance(campaign["scheduled_for"], datetime):
+                campaign["scheduled_for"] = campaign["scheduled_for"].isoformat()
+            if campaign.get("started_at") and isinstance(campaign["started_at"], datetime):
+                campaign["started_at"] = campaign["started_at"].isoformat()
+            if campaign.get("completed_at") and isinstance(campaign["completed_at"], datetime):
+                campaign["completed_at"] = campaign["completed_at"].isoformat()
+            if campaign.get("scheduled_time") and isinstance(campaign["scheduled_time"], datetime):
+                campaign["scheduled_time"] = campaign["scheduled_time"].isoformat()
+            
+            # Convert timestamps in call_results
+            if campaign.get("call_results"):
+                for result in campaign["call_results"]:
+                    if result.get("timestamp") and isinstance(result["timestamp"], datetime):
+                        result["timestamp"] = result["timestamp"].isoformat()
+        
+        # Get total count with filter
+        total = await campaign_db.campaigns.count_documents(filter_query)
+        
+        # Get user info for each campaign
+        user_db = get_user_db()
+        for campaign in campaigns:
+            if campaign.get("user_id"):
+                user = await user_db.get_user_by_id(campaign["user_id"])
+                if user:
+                    campaign["user_name"] = user.get("name", "Unknown")
+                    campaign["user_email"] = user.get("email", "Unknown")
+        
+        return JSONResponse({
+            "campaigns": campaigns,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/statistics")
+async def get_admin_statistics(
+    current_user: dict = Depends(get_admin_user)
+):
+    """Get overall statistics for admin dashboard"""
+    try:
+        from datetime import timedelta
+        
+        user_db = get_user_db()
+        campaign_db = get_campaign_db()
+        call_history_db = get_call_history_db()
+        
+        # Get today's date range
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        
+        # Users statistics
+        total_users = await user_db.collection.count_documents({})
+        users_today = await user_db.collection.count_documents({
+            "created_at": {"$gte": today_start, "$lt": today_end}
+        })
+        
+        # Campaigns statistics
+        total_campaigns = await campaign_db.campaigns.count_documents({})
+        campaigns_today = await campaign_db.campaigns.count_documents({
+            "created_at": {"$gte": today_start, "$lt": today_end}
+        })
+        campaigns_active = await campaign_db.campaigns.count_documents({
+            "status": {"$in": ["in_progress", "processing"]}
+        })
+        
+        # Calls statistics
+        total_calls = await call_history_db.collection.count_documents({})
+        calls_today = await call_history_db.collection.count_documents({
+            "created_at": {"$gte": today_start, "$lt": today_end}
+        })
+        
+        # Group campaigns by user
+        pipeline = [
+            {"$group": {
+                "_id": "$user_id",
+                "campaign_count": {"$sum": 1}
+            }},
+            {"$sort": {"campaign_count": -1}},
+            {"$limit": 10}
+        ]
+        top_users_by_campaigns = await campaign_db.campaigns.aggregate(pipeline).to_list(length=10)
+        
+        # Get user details for top users
+        for item in top_users_by_campaigns:
+            if item["_id"]:
+                user = await user_db.get_user_by_id(item["_id"])
+                if user:
+                    item["user_name"] = user.get("name", "Unknown")
+                    item["user_email"] = user.get("email", "Unknown")
+                else:
+                    item["user_name"] = "Unknown"
+                    item["user_email"] = "Unknown"
+        
+        return JSONResponse({
+            "users": {
+                "total": total_users,
+                "today": users_today
+            },
+            "campaigns": {
+                "total": total_campaigns,
+                "today": campaigns_today,
+                "active": campaigns_active
+            },
+            "calls": {
+                "total": total_calls,
+                "today": calls_today
+            },
+            "top_users_by_campaigns": top_users_by_campaigns
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/call-history")
+async def get_all_call_history_admin(
+    current_user: dict = Depends(get_admin_user),
+    limit: int = 100,
+    offset: int = 0
+):
+    """Get all call history from all users (admin only)"""
+    try:
+        call_history_db = get_call_history_db()
+        
+        # Get all call history without user_id filter
+        calls = await call_history_db.collection.find(
+            {}
+        ).sort("created_at", -1).skip(offset).limit(limit).to_list(length=limit)
+        
+        # Convert ObjectId to string and format dates
+        for call in calls:
+            call["_id"] = str(call["_id"])
+            if call.get("started_at"):
+                if isinstance(call["started_at"], datetime):
+                    call["started_at"] = call["started_at"].isoformat()
+            if call.get("ended_at"):
+                if isinstance(call["ended_at"], datetime):
+                    call["ended_at"] = call["ended_at"].isoformat()
+            if call.get("created_at"):
+                if isinstance(call["created_at"], datetime):
+                    call["created_at"] = call["created_at"].isoformat()
+            if call.get("updated_at"):
+                if isinstance(call["updated_at"], datetime):
+                    call["updated_at"] = call["updated_at"].isoformat()
+        
+        # Get total count
+        total = await call_history_db.collection.count_documents({})
+        
+        return JSONResponse({
+            "calls": calls,
             "total": total,
             "limit": limit,
             "offset": offset
@@ -701,6 +1006,135 @@ async def set_call_rate(
             "message": f"Call rate updated to Rs. {rate} per minute",
             "rate_per_minute": rate
         })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/wallets")
+async def get_all_wallets_admin(
+    current_user: dict = Depends(get_admin_user),
+    limit: int = 100,
+    offset: int = 0
+):
+    """Get all user wallets (admin only)"""
+    try:
+        wallet_db = get_wallet_db()
+        
+        # Get all wallets with pagination
+        wallets = await wallet_db.collection.find(
+            {}
+        ).sort("created_at", -1).skip(offset).limit(limit).to_list(length=limit)
+        
+        # Convert ObjectId and datetime objects
+        for wallet in wallets:
+            wallet["_id"] = str(wallet["_id"])
+            if wallet.get("created_at") and isinstance(wallet["created_at"], datetime):
+                wallet["created_at"] = wallet["created_at"].isoformat()
+            if wallet.get("updated_at") and isinstance(wallet["updated_at"], datetime):
+                wallet["updated_at"] = wallet["updated_at"].isoformat()
+        
+        # Get total count
+        total = await wallet_db.collection.count_documents({})
+        
+        # Get user details for each wallet
+        user_db = get_user_db()
+        for wallet in wallets:
+            user = await user_db.get_user_by_id(wallet["user_id"])
+            if user:
+                wallet["user_name"] = user.get("name", "Unknown")
+                wallet["user_email"] = user.get("email", "Unknown")
+        
+        return JSONResponse({
+            "wallets": wallets,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/wallets/{user_id}")
+async def update_wallet_balance_admin(
+    user_id: str,
+    amount: float = Body(..., embed=True),
+    current_user: dict = Depends(get_admin_user)
+):
+    """Update user wallet balance (admin only)"""
+    try:
+        wallet_db = get_wallet_db()
+        
+        # Get current wallet
+        wallet = await wallet_db.get_wallet_by_user_id(user_id)
+        if not wallet:
+            # Create wallet if it doesn't exist
+            await wallet_db.create_wallet(user_id, amount)
+        else:
+            # Update balance directly
+            await wallet_db.collection.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "balance": amount,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+        
+        # Get updated wallet
+        updated_wallet = await wallet_db.get_wallet_by_user_id(user_id)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Wallet balance updated successfully",
+            "balance": updated_wallet["balance"]
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/wallet-settings")
+async def get_wallet_settings_admin(
+    current_user: dict = Depends(get_admin_user)
+):
+    """Get wallet settings (admin only)"""
+    try:
+        wallet_db = get_wallet_db()
+        call_rate = await wallet_db.get_call_rate_per_minute()
+        
+        return JSONResponse({
+            "call_rate_per_minute": call_rate,
+            "currency": "INR"
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/wallet-settings")
+async def update_wallet_settings_admin(
+    call_rate_per_minute: float = Body(..., embed=True),
+    current_user: dict = Depends(get_admin_user)
+):
+    """Update wallet settings (admin only)"""
+    try:
+        if call_rate_per_minute <= 0:
+            raise HTTPException(status_code=400, detail="Call rate must be positive")
+        
+        wallet_db = get_wallet_db()
+        await wallet_db.set_call_rate_per_minute(call_rate_per_minute)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Wallet settings updated successfully",
+            "call_rate_per_minute": call_rate_per_minute,
+            "currency": "INR"
+        })
+    
     except HTTPException:
         raise
     except Exception as e:

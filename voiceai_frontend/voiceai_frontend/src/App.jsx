@@ -10,6 +10,7 @@ import CallHistory from './components/CallHistory';
 import Campaigns from './components/Campaigns';
 import WalletWidget from './components/WalletWidget';
 import Profile from './components/Profile';
+import AdminPanel from './components/AdminPanel';
 
 function App() {
   return (
@@ -60,6 +61,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminPanel />
               </ProtectedRoute>
             }
           />
@@ -120,6 +129,21 @@ function Navigation() {
               <History className="w-5 h-5" />
               <span>Call History</span>
             </Link>
+
+            {/* Admin Panel Link - Only visible to admins */}
+            {isAdmin() && (
+              <Link
+                to="/admin"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  isActive('/admin')
+                    ? 'bg-primary-600 text-white'
+                    : 'text-gray-700 hover:bg-primary-100'
+                }`}
+              >
+                <Shield className="w-5 h-5" />
+                <span>Admin Panel</span>
+              </Link>
+            )}
 
             {/* Wallet Widget */}
             <WalletWidget />
