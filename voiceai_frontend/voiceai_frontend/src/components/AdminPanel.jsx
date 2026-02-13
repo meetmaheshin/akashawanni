@@ -25,12 +25,14 @@ const AdminPanel = () => {
   // Filter states
   const [filters, setFilters] = useState({
     user_id: '',
+    campaign_id: '',
     date_from: '',
     date_to: '',
     status: ''
   });
   const [showFilters, setShowFilters] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
+  const [allCampaigns, setAllCampaigns] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -39,6 +41,7 @@ const AdminPanel = () => {
   useEffect(() => {
     loadStatistics();
     loadAllUsers();
+    loadAllCampaigns();
   }, []);
 
   const loadStatistics = async () => {
@@ -58,6 +61,17 @@ const AdminPanel = () => {
       setAllUsers(response.data.users);
     } catch (error) {
       console.error('Error loading users list:', error);
+    }
+  };
+
+  const loadAllCampaigns = async () => {
+    try {
+      const response = await axios.get(`/api/admin/campaigns`, {
+        params: { limit: 1000, offset: 0 }
+      });
+      setAllCampaigns(response.data.campaigns);
+    } catch (error) {
+      console.error('Error loading campaigns list:', error);
     }
   };
 
@@ -85,9 +99,14 @@ const AdminPanel = () => {
         setCampaigns(response.data.campaigns);
         setTotalItems(response.data.total);
       } else if (activeTab === 'callHistory') {
-        const response = await axios.get(`/api/admin/call-history`, {
-          params: { limit: itemsPerPage, offset }
-        });
+        const params = { limit: itemsPerPage, offset };
+        if (filters.user_id) params.user_id = filters.user_id;
+        if (filters.campaign_id) params.campaign_id = filters.campaign_id;
+        if (filters.date_from) params.date_from = filters.date_from;
+        if (filters.date_to) params.date_to = filters.date_to;
+        if (filters.status) params.status = filters.status;
+        
+        const response = await axios.get(`/api/admin/call-history`, { params });
         setCallHistory(response.data.calls);
         setTotalItems(response.data.total);
       } else if (activeTab === 'wallets') {
@@ -218,6 +237,7 @@ const AdminPanel = () => {
   const clearFilters = () => {
     setFilters({
       user_id: '',
+      campaign_id: '',
       date_from: '',
       date_to: '',
       status: ''
@@ -364,7 +384,7 @@ const AdminPanel = () => {
         </div>
 
         {/* Filters Section */}
-        {(activeTab === 'users' || activeTab === 'campaigns') && (
+        {(activeTab === 'users' || activeTab === 'campaigns' || activeTab === 'callHistory') && (
           <div className="mb-6">
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -444,6 +464,59 @@ const AdminPanel = () => {
                         <option value="completed">Completed</option>
                         <option value="failed">Failed</option>
                         <option value="paused">Paused</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                
+                {activeTab === 'callHistory' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Filter by User</label>
+                      <select
+                        value={filters.user_id}
+                        onChange={(e) => handleFilterChange('user_id', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Users</option>
+                        {allUsers.map(user => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Campaign</label>
+                      <select
+                        value={filters.campaign_id}
+                        onChange={(e) => handleFilterChange('campaign_id', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Campaigns</option>
+                        {allCampaigns.map(campaign => (
+                          <option key={campaign._id} value={campaign._id}>
+                            {campaign.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Status</label>
+                      <select
+                        value={filters.status}
+                        onChange={(e) => handleFilterChange('status', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="initiated">Initiated</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="no-answer">No Answer</option>
+                        <option value="busy">Busy</option>
                       </select>
                     </div>
                   </div>
@@ -676,18 +749,26 @@ const AdminPanel = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone Number</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Knowledge Base</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Campaign</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started At</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredCallHistory.map((call) => (
                   <tr key={call._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900">{call.phone_number}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{call.knowledge_base_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div>
+                        <div className="font-medium text-xs">{call.user_name || 'Unknown'}</div>
+                        <div className="text-xs text-gray-500">{call.user_email || '-'}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {call.campaign_name || call.knowledge_base_name || '-'}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {call.duration ? `${Math.round(call.duration)}s` : '-'}
                     </td>
@@ -704,9 +785,6 @@ const AdminPanel = () => {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {call.started_at ? new Date(call.started_at).toLocaleString() : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 font-mono text-xs">
-                      {call.user_id?.substring(0, 8)}...
                     </td>
                   </tr>
                 ))}

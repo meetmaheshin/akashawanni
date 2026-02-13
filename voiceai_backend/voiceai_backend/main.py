@@ -908,15 +908,37 @@ async def get_admin_statistics(
 async def get_all_call_history_admin(
     current_user: dict = Depends(get_admin_user),
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
+    user_id: Optional[str] = None,
+    campaign_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None
 ):
-    """Get all call history from all users (admin only)"""
+    """Get all call history from all users with filtering (admin only)"""
     try:
         call_history_db = get_call_history_db()
         
-        # Get all call history without user_id filter
+        # Build filter query
+        filter_query = {}
+        if user_id:
+            filter_query["user_id"] = user_id
+        if campaign_id:
+            filter_query["campaign_id"] = campaign_id
+        if status:
+            filter_query["status"] = status
+        if date_from or date_to:
+            filter_query["created_at"] = {}
+            if date_from:
+                filter_query["created_at"]["$gte"] = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            if date_to:
+                from datetime import timedelta
+                end_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                filter_query["created_at"]["$lt"] = end_date + timedelta(days=1)
+        
+        # Get call history with filter
         calls = await call_history_db.collection.find(
-            {}
+            filter_query
         ).sort("created_at", -1).skip(offset).limit(limit).to_list(length=limit)
         
         # Convert ObjectId to string and format dates
@@ -935,8 +957,28 @@ async def get_all_call_history_admin(
                 if isinstance(call["updated_at"], datetime):
                     call["updated_at"] = call["updated_at"].isoformat()
         
-        # Get total count
-        total = await call_history_db.collection.count_documents({})
+        # Get total count with filter
+        total = await call_history_db.collection.count_documents(filter_query)
+        
+        # Get user info and campaign info for each call
+        user_db = get_user_db()
+        campaign_db = get_campaign_db()
+        
+        for call in calls:
+            if call.get("user_id"):
+                user = await user_db.get_user_by_id(call["user_id"])
+                if user:
+                    call["user_name"] = user.get("name", "Unknown")
+                    call["user_email"] = user.get("email", "Unknown")
+            
+            if call.get("campaign_id"):
+                try:
+                    from bson import ObjectId
+                    campaign = await campaign_db.get_campaign(call["campaign_id"])
+                    if campaign:
+                        call["campaign_name"] = campaign.get("name", "Unknown")
+                except:
+                    call["campaign_name"] = "Unknown"
         
         return JSONResponse({
             "calls": calls,
