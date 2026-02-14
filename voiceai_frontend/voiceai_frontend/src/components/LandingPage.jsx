@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Phone, Megaphone, BarChart3, Globe2, Zap, Shield, Clock,
-  Users, TrendingUp, CheckCircle, ChevronDown, ChevronUp,
-  Play, ArrowRight, Star, MessageSquare, Headphones, Bot,
+  TrendingUp, CheckCircle, ChevronDown, ChevronUp,
+  ArrowRight, Star, Bot,
   IndianRupee, PhoneCall, FileText, Mic
 } from 'lucide-react';
 
@@ -77,121 +77,101 @@ const TypewriterText = ({ texts, speed = 80, pause = 2000 }) => {
   );
 };
 
-// ─── Live Call Demo Simulation ───
-const LiveCallDemo = () => {
-  const [stage, setStage] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  const conversation = [
-    { role: 'ai', text: 'Hello! This is Priya from TechSolutions. Am I speaking with Mr. Sharma?', delay: 0 },
-    { role: 'human', text: 'Yes, this is Sharma speaking.', delay: 2500 },
-    { role: 'ai', text: 'Great! I\'m calling regarding our new cloud hosting plans. We have a special offer for businesses like yours — 50% off for the first 3 months.', delay: 2000 },
-    { role: 'human', text: 'That sounds interesting. Tell me more about the features.', delay: 3500 },
-    { role: 'ai', text: 'Absolutely! You get 99.9% uptime, free SSL, 24/7 support, and auto-scaling. Shall I send the details to your email?', delay: 2500 },
-    { role: 'human', text: 'Yes, please send it to my email.', delay: 3000 },
-    { role: 'ai', text: 'Perfect! I\'ll send it right away. Thank you for your time, Mr. Sharma. Have a great day!', delay: 2000 },
-  ];
+// ─── Hero Visual — Voice Waveform + Live Stats ───
+const HeroVisual = () => {
+  const [timer, setTimer] = useState(0);
 
   useEffect(() => {
-    if (!isPlaying) return;
-    if (stage >= conversation.length) {
-      setTimeout(() => { setStage(0); setIsPlaying(false); }, 3000);
-      return;
-    }
-    const timer = setTimeout(() => setStage(s => s + 1), conversation[stage].delay + 1500);
-    return () => clearTimeout(timer);
-  }, [stage, isPlaying]);
+    const interval = setInterval(() => setTimer(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const startDemo = () => {
-    setStage(0);
-    setIsPlaying(true);
-  };
+  const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   return (
     <div className="relative w-full max-w-md mx-auto">
-      {/* Phone frame */}
-      <div className="bg-gray-900 rounded-[2.5rem] p-3 shadow-2xl shadow-indigo-500/20 border border-gray-700">
-        <div className="bg-gray-950 rounded-[2rem] overflow-hidden">
-          {/* Status bar */}
-          <div className="flex items-center justify-between px-6 py-2 text-white text-xs">
-            <span>9:41</span>
-            <div className="w-24 h-5 bg-gray-800 rounded-full mx-auto"></div>
-            <span>100%</span>
-          </div>
-
-          {/* Call header */}
-          <div className="bg-gradient-to-b from-indigo-600 to-indigo-700 px-6 py-4 text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-full mx-auto mb-2 flex items-center justify-center">
-              <Bot className="w-8 h-8 text-white" />
+      {/* Main card */}
+      <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-8 shadow-2xl shadow-indigo-500/10">
+        {/* Active call header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+              <Phone className="w-5 h-5 text-white" />
             </div>
-            <p className="text-white font-semibold text-lg">Akashvanni AI</p>
-            <p className="text-indigo-200 text-sm flex items-center justify-center gap-1">
-              {isPlaying ? (
-                <><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> Live Call</>
-              ) : (
-                'Tap Play to see demo'
-              )}
-            </p>
-          </div>
-
-          {/* Conversation */}
-          <div className="bg-gray-100 px-4 py-4 min-h-[280px] max-h-[280px] overflow-y-auto space-y-3">
-            {!isPlaying && stage === 0 && (
-              <div className="flex flex-col items-center justify-center h-[250px] text-gray-400">
-                <button
-                  onClick={startDemo}
-                  className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transform hover:scale-110 transition-all"
-                >
-                  <Play className="w-8 h-8 text-white ml-1" />
-                </button>
-                <p className="mt-4 text-sm font-medium">Watch AI Call Demo</p>
-              </div>
-            )}
-            {conversation.slice(0, stage).map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'ai' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === 'ai'
-                    ? 'bg-white text-gray-800 shadow-sm rounded-bl-md'
-                    : 'bg-indigo-600 text-white rounded-br-md'
-                }`}>
-                  {msg.role === 'ai' && <p className="text-[10px] font-bold text-indigo-600 mb-0.5">AI AGENT</p>}
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            {isPlaying && stage < conversation.length && (
-              <div className="flex justify-start">
-                <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Call controls */}
-          <div className="bg-gray-200 px-6 py-4 flex items-center justify-center gap-6">
-            <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center">
-              <Mic className="w-5 h-5 text-gray-600" />
+            <div>
+              <p className="text-white font-semibold text-sm">AI Agent — Priya</p>
+              <p className="text-green-400 text-xs flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                Live Call &bull; {formatTime(timer)}
+              </p>
             </div>
-            <button
-              onClick={() => { if (isPlaying) { setIsPlaying(false); setStage(0); } else startDemo(); }}
-              className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg ${
-                isPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
-              } transition-colors`}
-            >
-              {isPlaying ? (
-                <Phone className="w-7 h-7 text-white transform rotate-[135deg]" />
-              ) : (
-                <Phone className="w-7 h-7 text-white" />
-              )}
-            </button>
-            <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center">
-              <Headphones className="w-5 h-5 text-gray-600" />
-            </div>
+          </div>
+          <div className="px-3 py-1 bg-green-500/20 rounded-full">
+            <span className="text-green-400 text-xs font-bold">CONNECTED</span>
+          </div>
+        </div>
+
+        {/* Waveform animation */}
+        <div className="flex items-center justify-center gap-[3px] h-20 mb-6">
+          {Array(32).fill(0).map((_, i) => (
+            <div
+              key={i}
+              className="w-1.5 bg-gradient-to-t from-indigo-500 to-purple-400 rounded-full"
+              style={{
+                height: `${20 + Math.sin((timer * 3 + i * 0.5)) * 15 + Math.random() * 25}px`,
+                opacity: 0.5 + Math.sin((timer * 2 + i * 0.3)) * 0.3,
+                transition: 'height 0.3s ease',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* AI transcript line */}
+        <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
+          <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider mb-1">AI Speaking</p>
+          <p className="text-white/80 text-sm leading-relaxed italic">
+            "Great! I'll send the brochure to your email. Is there anything else you'd like to know about our plans?"
+          </p>
+        </div>
+
+        {/* Live stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white/5 rounded-xl p-3 text-center border border-white/10">
+            <p className="text-2xl font-bold text-white">94%</p>
+            <p className="text-[10px] text-indigo-300 font-medium mt-0.5">Completion</p>
+          </div>
+          <div className="bg-white/5 rounded-xl p-3 text-center border border-white/10">
+            <p className="text-2xl font-bold text-green-400">Hot</p>
+            <p className="text-[10px] text-indigo-300 font-medium mt-0.5">Lead Score</p>
+          </div>
+          <div className="bg-white/5 rounded-xl p-3 text-center border border-white/10">
+            <p className="text-2xl font-bold text-white">0.3s</p>
+            <p className="text-[10px] text-indigo-300 font-medium mt-0.5">Latency</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating notification cards */}
+      <div className="absolute -top-4 -right-4 bg-white rounded-xl px-4 py-3 shadow-xl animate-bounce" style={{animationDuration: '3s'}}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-900">Lead Captured!</p>
+            <p className="text-[10px] text-gray-500">+91 98xxx xxxxx</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-3 -left-4 bg-white rounded-xl px-4 py-3 shadow-xl animate-bounce" style={{animationDuration: '4s', animationDelay: '1.5s'}}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+            <BarChart3 className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-900">247 Calls Today</p>
+            <p className="text-[10px] text-gray-500">63 hot leads found</p>
           </div>
         </div>
       </div>
@@ -323,10 +303,10 @@ const LandingPage = () => {
                   Start Calling Now <ArrowRight className="w-5 h-5" />
                 </Link>
                 <a
-                  href="#demo"
+                  href="#pricing"
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border border-white/20 text-white rounded-xl font-semibold text-lg hover:bg-white/20 transition-all"
                 >
-                  <Play className="w-5 h-5" /> Watch Demo
+                  <IndianRupee className="w-5 h-5" /> See Pricing
                 </a>
               </div>
 
@@ -347,9 +327,9 @@ const LandingPage = () => {
               </div>
             </div>
 
-            {/* Right — Live Demo */}
-            <div id="demo" className="flex justify-center lg:justify-end">
-              <LiveCallDemo />
+            {/* Right — Visual */}
+            <div className="flex justify-center lg:justify-end">
+              <HeroVisual />
             </div>
           </div>
         </div>
