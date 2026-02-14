@@ -11,6 +11,7 @@ import Campaigns from './components/Campaigns';
 import WalletWidget from './components/WalletWidget';
 import Profile from './components/Profile';
 import AdminPanel from './components/AdminPanel';
+import LandingPage from './components/LandingPage';
 
 function App() {
   return (
@@ -30,10 +31,14 @@ function AppContent() {
       {isAuthenticated && <Navigation />}
       <main className={isAuthenticated ? "container mx-auto px-4 py-8" : ""}>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+          <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Signup />} />
           <Route
             path="/"
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />}
+          />
+          <Route
+            path="/dashboard"
             element={
               <ProtectedRoute>
                 <CallInterface />
@@ -72,7 +77,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
         </Routes>
       </main>
     </div>
@@ -95,9 +100,9 @@ function Navigation() {
           
           <div className="flex items-center space-x-4">
             <Link
-              to="/"
+              to="/dashboard"
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
-                isActive('/')
+                isActive('/dashboard')
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-700 hover:bg-primary-100'
               }`}
