@@ -27,16 +27,13 @@ function AppContent() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen gradient-bg">
+    <div className={`min-h-screen ${isAuthenticated ? 'gradient-bg' : ''}`}>
       {isAuthenticated && <Navigation />}
       <main className={isAuthenticated ? "container mx-auto px-4 py-8" : ""}>
         <Routes>
           <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
           <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Signup />} />
-          <Route
-            path="/"
-            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />}
-          />
+          <Route path="/" element={<LandingPage />} />
           <Route
             path="/dashboard"
             element={
