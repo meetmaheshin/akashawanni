@@ -240,11 +240,8 @@ const LandingPage = () => {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
               <img src="/logo.png" alt="Akashvanni" className="h-9 sm:h-10 w-auto" />
-              <span className={`text-xl font-bold hidden sm:block ${isScrolled ? 'text-gray-900' : 'text-white'}`}>
-                Akashvanni
-              </span>
             </div>
             <div className={`hidden md:flex items-center gap-8 text-sm font-medium ${isScrolled ? 'text-gray-700' : 'text-white/90'}`}>
               <a href="#features" className="hover:text-indigo-500 transition-colors">Features</a>
