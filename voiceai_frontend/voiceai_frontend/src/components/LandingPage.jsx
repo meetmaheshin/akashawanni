@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Phone, Megaphone, BarChart3, Globe2, Zap, Shield, Clock,
   Users, TrendingUp, CheckCircle, ChevronDown, ChevronUp,
@@ -224,6 +225,7 @@ const FAQItem = ({ question, answer }) => {
 // ─── MAIN LANDING PAGE ───
 const LandingPage = () => {
   const [isScrolled, setIsScrolled] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -251,20 +253,31 @@ const LandingPage = () => {
               <a href="#faq" className="hover:text-indigo-500 transition-colors">FAQ</a>
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                to="/login"
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  isScrolled ? 'text-gray-700 hover:text-indigo-600' : 'text-white/90 hover:text-white'
-                }`}
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold text-sm hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30"
-              >
-                Start Free
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  to="/dashboard"
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold text-sm hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                      isScrolled ? 'text-gray-700 hover:text-indigo-600' : 'text-white/90 hover:text-white'
+                    }`}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold text-sm hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30"
+                  >
+                    Start Free
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

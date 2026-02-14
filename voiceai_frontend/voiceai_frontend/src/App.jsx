@@ -25,11 +25,13 @@ function App() {
 
 function AppContent() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const isLanding = location.pathname === '/';
 
   return (
-    <div className={`min-h-screen ${isAuthenticated ? 'gradient-bg' : ''}`}>
-      {isAuthenticated && <Navigation />}
-      <main className={isAuthenticated ? "container mx-auto px-4 py-8" : ""}>
+    <div className={`min-h-screen ${isAuthenticated && !isLanding ? 'gradient-bg' : ''}`}>
+      {isAuthenticated && !isLanding && <Navigation />}
+      <main className={isAuthenticated && !isLanding ? "container mx-auto px-4 py-8" : ""}>
         <Routes>
           <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
           <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Signup />} />
